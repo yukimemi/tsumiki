@@ -99,6 +99,9 @@ export async function addComment(input: {
   batch.update(doc(firestore, ENTRIES, input.entryId), {
     commentCount: increment(1),
     lastCommentAt: serverTimestamp(),
+    // Read by the unread badge so my own comment on my own entry is not
+    // announced back to me.
+    lastCommentBy: input.authorId,
   });
   await batch.commit();
 }

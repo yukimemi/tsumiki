@@ -15,15 +15,23 @@ const ITEMS: readonly {
   glyph: string;
   /** The approval queue lives on コイン, so that is where its count goes. */
   pending?: boolean;
+  /** Comments on your own completions live on みんな. */
+  unread?: boolean;
 }[] = [
   { to: "/", label: "きょう", glyph: "🧱" },
-  { to: "/family", label: "みんな", glyph: "🧑‍🤝‍🧑" },
+  { to: "/family", label: "みんな", glyph: "🧑‍🤝‍🧑", unread: true },
   { to: "/coins", label: "コイン", glyph: "🪙", pending: true },
   { to: "/records", label: "きろく", glyph: "📅" },
   { to: "/settings", label: "せってい", glyph: "⚙️" },
 ];
 
-export function BottomNav({ pendingCount = 0 }: { pendingCount?: number }) {
+export function BottomNav({
+  pendingCount = 0,
+  unreadCount = 0,
+}: {
+  pendingCount?: number;
+  unreadCount?: number;
+}) {
   return (
     <nav
       aria-label="メインメニュー"
@@ -57,6 +65,16 @@ export function BottomNav({ pendingCount = 0 }: { pendingCount?: number }) {
                       {pendingCount}
                     </Badge>
                     <span className="sr-only">けんの しょうにんまち</span>
+                  </span>
+                ) : null}
+                {item.unread && unreadCount > 0 ? (
+                  <span className="absolute -right-4 -top-1.5">
+                    {/* `self` is the "this one is about you" slot. `wait`
+                        belongs to the approval queue and nothing else. */}
+                    <Badge tone="self" className="shadow-glow-self">
+                      {unreadCount}
+                    </Badge>
+                    <span className="sr-only">けんの あたらしい コメント</span>
                   </span>
                 ) : null}
               </span>

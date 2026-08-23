@@ -171,12 +171,17 @@ service cloud.firestore {
     }
 
     // Comment counters are denormalised onto the entry, and anyone in the
-    // family may comment on anyone's entry — so any member may bump these two
-    // fields, and nothing else, on any entry of their household.
+    // family may comment on anyone's entry — so any member may bump these
+    // three fields, and nothing else, on any entry of their household.
+    // `lastCommentBy` is what lets the unread badge skip my own comment; it is
+    // pinned to the caller so it cannot be used to forge authorship.
     function isCommentCounterUpdate() {
       return isMember(resource.data.householdId)
         && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['commentCount', 'lastCommentAt']);
+            .hasOnly(['commentCount', 'lastCommentAt', 'lastCommentBy'])
+        && (!request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['lastCommentBy'])
+            || request.resource.data.lastCommentBy == request.auth.uid);
     }
 
     // A rejected chore can be done again. completeTask writes the same

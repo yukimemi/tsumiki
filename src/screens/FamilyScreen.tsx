@@ -18,6 +18,8 @@ import {
 } from "../components/ui";
 import type { SegmentedOption } from "../components/ui";
 import { approveEntry, rejectEntry, useRecentEntries } from "../data/entries";
+import { useUserDoc } from "../data/users";
+import { unreadEntryIds } from "../lib/unread";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
 import { addDaysKey, formatDateJa, todayKey } from "../lib/date";
@@ -68,6 +70,17 @@ export function FamilyScreen(): JSX.Element {
 
   const recent = useRecentEntries(householdId);
   const coinYen = household?.coinYen ?? 0;
+
+  // Same marker the nav badge reads, so the dot on a card and the count on the
+  // tab can never disagree.
+  const userDoc = useUserDoc(uid);
+  const seenAtMillis =
+    householdId && userDoc.data?.commentsSeenAt
+      ? (userDoc.data.commentsSeenAt[householdId]?.toMillis() ?? null)
+      : null;
+  const unreadIds = new Set(
+    unreadEntryIds({ entries: recent.data, memberId: uid, seenAtMillis }),
+  );
 
   const commentsEntry =
     recent.data.find((entry) => entry.id === commentsEntryId) ?? null;
@@ -209,6 +222,7 @@ export function FamilyScreen(): JSX.Element {
                           (member) => member.uid === entry.memberId,
                         ) ?? null
                       }
+                      unread={unreadIds.has(entry.id)}
                       coinYen={coinYen}
                       canDecide={isParent}
                       onApprove={

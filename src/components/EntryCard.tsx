@@ -28,9 +28,18 @@ export function EntryCard(props: {
   onApprove?(origin: DOMRect): void;
   onReject?(): void;
   onOpenComments(): void;
+  /** A comment from someone else that this member has not opened yet. */
+  unread?: boolean;
   compact?: boolean;
 }): JSX.Element {
-  const { entry, member, coinYen, canDecide, compact = false } = props;
+  const {
+    entry,
+    member,
+    coinYen,
+    canDecide,
+    unread = false,
+    compact = false,
+  } = props;
   const pill = STATUS_PILL[entry.status];
   const deciding = canDecide && entry.status === "pending";
 
@@ -88,11 +97,23 @@ export function EntryCard(props: {
         <button
           type="button"
           onClick={() => props.onOpenComments()}
-          className="inline-flex min-h-tap items-center gap-1 rounded-pill px-2 text-sm font-bold text-muted transition-colors active:bg-sunk focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-self"
-          aria-label={`コメント ${entry.commentCount} けんを みる`}
+          className={`inline-flex min-h-tap items-center gap-1 rounded-pill px-2 text-sm font-bold transition-colors active:bg-sunk focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-self ${
+            unread ? "text-self" : "text-muted"
+          }`}
+          aria-label={
+            unread
+              ? `あたらしい コメント ${entry.commentCount} けんを みる`
+              : `コメント ${entry.commentCount} けんを みる`
+          }
         >
           <span aria-hidden="true">💬</span>
           {entry.commentCount > 0 ? entry.commentCount : "コメント"}
+          {unread ? (
+            <span
+              aria-hidden="true"
+              className="ml-0.5 h-2 w-2 rounded-pill bg-self shadow-glow-self"
+            />
+          ) : null}
         </button>
 
         {deciding ? (

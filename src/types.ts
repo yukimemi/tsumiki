@@ -111,6 +111,8 @@ export type Entry = {
   rejectReason?: string;
   commentCount: number;
   lastCommentAt?: Timestamp;
+  /** Who wrote it, so "someone replied to me" excludes my own comment. */
+  lastCommentBy?: string;
 };
 
 export type Comment = {
@@ -177,6 +179,12 @@ export type UserDoc = {
   displayName?: string;
   photoURL?: string;
   updatedAt?: Timestamp;
+  /**
+   * When this user last opened a comment thread, per household. One marker
+   * per household rather than per entry: the point is "there is something new
+   * for you", and a map keyed by entry id would grow without a bound.
+   */
+  commentsSeenAt?: Record<string, Timestamp>;
 };
 
 /** Uniform shape returned by every live-subscription hook in `src/data`. */

@@ -2,7 +2,9 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { useUid } from "../auth/context";
 import { balanceOf, useBalances } from "../data/coins";
-import { usePendingEntries } from "../data/entries";
+import { usePendingEntries, useRecentEntries } from "../data/entries";
+import { useUserDoc } from "../data/users";
+import { unreadEntryIds } from "../lib/unread";
 import { useHousehold } from "../household/context";
 import { BottomNav } from "./BottomNav";
 import { Avatar, CoinAmount } from "./ui";
@@ -104,6 +106,20 @@ export function AppShell({
   const pending = usePendingEntries(isParent ? householdId : null);
   const keyboardOpen = useKeyboardOpen();
 
+  // Everyone subscribes to this one: the badge is how a child learns they were
+  // praised, and the timeline screens read the same window.
+  const recent = useRecentEntries(householdId);
+  const userDoc = useUserDoc(uid);
+  const seenAtMillis =
+    householdId && userDoc.data?.commentsSeenAt
+      ? (userDoc.data.commentsSeenAt[householdId]?.toMillis() ?? null)
+      : null;
+  const unreadCount = unreadEntryIds({
+    entries: recent.data,
+    memberId: uid,
+    seenAtMillis,
+  }).length;
+
   const me = members.find((member) => member.uid === uid) ?? null;
   const coins = balanceOf(balances.data, uid)?.coins ?? 0;
   const yen = household ? coins * household.coinYen : undefined;
@@ -138,7 +154,10 @@ export function AppShell({
       </main>
 
       {keyboardOpen ? null : (
-        <BottomNav pendingCount={isParent ? pending.data.length : 0} />
+        <BottomNav
+          pendingCount={isParent ? pending.data.length : 0}
+          unreadCount={unreadCount}
+        />
       )}
     </div>
   );

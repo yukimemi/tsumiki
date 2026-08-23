@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { addComment, deleteComment, useComments } from "../data/comments";
+import { markCommentsSeen } from "../data/users";
 import { useEffects } from "../effects/context";
 import type { Comment, Entry, MemberInfo, Role } from "../types";
 import { Avatar, Badge, Button, Spinner, Textarea } from "./ui";
@@ -54,6 +55,14 @@ export function CommentThread(props: {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+
+  // Opening a thread is the moment the reader has actually read. Fire and
+  // forget: a marker that fails to save costs a badge that lingers, which is
+  // the harmless direction.
+  const householdId = entry.householdId;
+  useEffect(() => {
+    void markCommentsSeen(currentUid, householdId).catch(() => {});
+  }, [currentUid, householdId]);
   const endRef = useRef<HTMLDivElement>(null);
   const count = comments.data.length;
   useEffect(() => {
