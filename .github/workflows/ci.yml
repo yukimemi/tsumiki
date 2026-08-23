@@ -1,0 +1,52 @@
+name: ci
+
+# Lint, typecheck, build and test on every pull request.
+#
+# Why this exists: Renovate is configured to automerge minor and patch bumps
+# (see the `pj-base` shared preset), and GitHub will merge a green PR the
+# moment nothing is red. Without a workflow that actually runs the project,
+# "nothing is red" only means Vercel finished a preview — so two dependency
+# bumps landed on main here having never been built or tested. This is the
+# gate that makes that automerge honest.
+#
+# Not owned by a kata template: the pnpm and react-web layers ship no CI, so
+# this file belongs to the project and `kata apply` will not touch it.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # A new push to a PR makes the in-flight run pointless.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `--frozen-lockfile` is the point on a dependency PR: it fails when
+      # package.json and pnpm-lock.yaml disagree, which is exactly the state a
+      # half-applied bump leaves behind.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      # `pnpm build` is `tsc -b && vite build`, so this is the typecheck too.
+      - run: pnpm build
+
+      - run: pnpm test
