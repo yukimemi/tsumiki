@@ -75,6 +75,12 @@ export type Task = {
   coin: number;
   /** When true a completion lands as `pending` and waits for a parent. */
   needsApproval: boolean;
+  /**
+   * When true the completion asks for a photo first. Optional everywhere else
+   * — any completion may carry one — but a chore whose whole point is that it
+   * was actually done can insist.
+   */
+  needsPhoto?: boolean;
   /** Empty means anyone in the household may do it. */
   assigneeIds: string[];
   repeat: RepeatRule;
@@ -113,6 +119,13 @@ export type Entry = {
   lastCommentAt?: Timestamp;
   /** Who wrote it, so "someone replied to me" excludes my own comment. */
   lastCommentBy?: string;
+  /**
+   * Storage path of the proof photo, not a download URL. URLs carry a token
+   * that changes if the object is ever re-uploaded; the path does not, and the
+   * client resolves it to a URL on demand.
+   */
+  photoPath?: string;
+  photoAt?: Timestamp;
 };
 
 export type Comment = {

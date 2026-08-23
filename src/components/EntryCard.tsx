@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 
 import { formatWhenJa } from "../lib/when";
+import { EntryPhoto } from "./EntryPhoto";
 import type { Entry, MemberInfo, Role } from "../types";
 import { Avatar, Badge, Button, Card, CoinAmount } from "./ui";
 
@@ -84,6 +85,13 @@ export function EntryCard(props: {
           yen={compact || coinYen <= 0 ? undefined : entry.coin * coinYen}
           size="sm"
           className="flex-none"
+        />
+
+        {/* Proof sits next to the reward, which is the pairing that matters:
+            this is what the coins were paid for. */}
+        <EntryPhoto
+          path={entry.photoPath}
+          alt={`${entry.taskTitle} の しゃしん`}
         />
       </button>
 

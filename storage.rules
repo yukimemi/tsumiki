@@ -51,15 +51,33 @@ service firebase.storage {
             in ['owner', 'parent'];
     }
 
+    // Proof-of-task photos: households/{id}/entries/{entryId}/{file}.
+    //
+    // Any member may upload, not just a parent. The whole point is that the
+    // child who did the chore photographs it; a rule that only let parents
+    // write would leave the evidence trail to the person it is evidence for.
+    // The size and type caps stay: a phone camera produces 8 MB files and the
+    // client downscales before upload, so anything near the cap is a bug or an
+    // attempt to fill the bucket.
+    match /households/{householdId}/entries/{entryId}/{file} {
+      allow read: if isMember(householdId);
+      allow create, update: if isAllowedEmail()
+        && isMember(householdId)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      // Undo removes the photo with the completion, so a member has to be able
+      // to delete their own. `request.resource` is null on delete, which is
+      // why this is a separate rule.
+      allow delete: if isAllowedEmail() && isMember(householdId);
+    }
+
+    // Anything else under a household stays parent-only.
     match /households/{householdId}/{allPaths=**} {
       allow read: if isMember(householdId);
-      // Only parents upload, only images, only small ones: this bucket holds
-      // avatars and proof-of-task photos, nothing else.
       allow create, update: if isAllowedEmail()
         && isParent(householdId)
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
-      // Split out because `request.resource` is null on delete.
       allow delete: if isAllowedEmail() && isParent(householdId);
     }
   }

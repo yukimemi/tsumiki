@@ -3,6 +3,8 @@ import type { JSX } from "react";
 
 import { useUid } from "../auth/context";
 import { CommentThread } from "../components/CommentThread";
+import { EntryPhoto } from "../components/EntryPhoto";
+import { PhotoButton } from "../components/PhotoButton";
 import { TaskRow } from "../components/TaskRow";
 import {
   Avatar,
@@ -18,14 +20,17 @@ import {
 } from "../components/ui";
 import {
   completeTask,
+  setEntryPhoto,
   undoEntry,
   useEntriesForDate,
   useRecentEntries,
 } from "../data/entries";
+import { uploadEntryPhoto } from "../data/photos";
 import { useTasks } from "../data/tasks";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
 import { addDaysKey, formatDateJa, nowHm, todayKey } from "../lib/date";
+import { entryId } from "../lib/ids";
 import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import type { Entry } from "../types";
 import { progressOf, todayRowsFor } from "./today";
@@ -46,6 +51,7 @@ export function TodayScreen(): JSX.Element {
   const { household, householdId, members, isParent } = useHousehold();
   const { celebrate, combo } = useEffects();
   const action = useAction();
+  const photoAction = useAction();
 
   const today = todayKey();
   const [dateKey, setDateKey] = useState(today);
@@ -58,6 +64,11 @@ export function TodayScreen(): JSX.Element {
   // so the row is re-derived from live data and the sheet follows a completion
   // or an undo instead of showing a stale snapshot.
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+  // Where the circle was when a photo-required task was tapped, so the
+  // celebration still flies out of the row and not the sheet's button.
+  const [pendingPhotoOrigin, setPendingPhotoOrigin] = useState<DOMRect | null>(
+    null,
+  );
 
   // A parent who switched to someone who has since left falls back to self.
   const shownMemberId = members.some((member) => member.uid === pickedMemberId)
@@ -101,14 +112,29 @@ export function TodayScreen(): JSX.Element {
 
   const detailRow = rows.find((row) => row.task.id === detailTaskId) ?? null;
 
-  const handleComplete = (row: TodayRow, origin: DOMRect): void => {
+  const handleComplete = (
+    row: TodayRow,
+    origin: DOMRect,
+    file?: File,
+  ): void => {
     void action.run(async () => {
+      // Upload before the entry write. A path recorded for an object that
+      // never arrived would render as a permanently broken photo.
+      const photoPath = file
+        ? await uploadEntryPhoto({
+            householdId: row.task.householdId,
+            entryId: entryId(row.task.id, shownMemberId, dateKey),
+            file,
+          })
+        : undefined;
+
       const status = await completeTask(
         row.task,
         shownMemberId,
         dateKey,
         uid,
         row.entry,
+        photoPath,
       );
       celebrate("stack", { origin });
       // Pending coins are a promise, not earnings: only an approved landing
@@ -121,6 +147,19 @@ export function TodayScreen(): JSX.Element {
         celebrate("wish", { origin });
       }
     });
+  };
+
+  /**
+   * A chore that insists on a photo cannot be finished by the circle alone —
+   * the tap opens the detail sheet, where the camera button lives.
+   */
+  const requestComplete = (row: TodayRow, origin: DOMRect): void => {
+    if (row.task.needsPhoto && !row.entry) {
+      setPendingPhotoOrigin(origin);
+      setDetailTaskId(row.task.id);
+      return;
+    }
+    handleComplete(row, origin);
   };
 
   const handleUndo = (entry: Entry): void => {
@@ -278,7 +317,7 @@ export function TodayScreen(): JSX.Element {
                   (row.entry.memberId === uid || isParent) &&
                   !isFuture
                 }
-                onComplete={(origin) => handleComplete(row, origin)}
+                onComplete={(origin) => requestComplete(row, origin)}
                 onUndo={() => {
                   if (row.entry) handleUndo(row.entry);
                 }}
@@ -365,19 +404,72 @@ export function TodayScreen(): JSX.Element {
               </p>
             ) : null}
 
+            {detailRow.entry?.photoPath ? (
+              <EntryPhoto
+                path={detailRow.entry.photoPath}
+                alt={`${detailRow.task.title} の しゃしん`}
+                size="full"
+              />
+            ) : null}
+
             <div className="flex flex-col gap-2">
               {detailRow.entry === null && !isFuture ? (
-                <Button
-                  block
-                  disabled={action.busy}
-                  onClick={(event) => {
-                    const origin = event.currentTarget.getBoundingClientRect();
-                    setDetailTaskId(null);
-                    handleComplete(detailRow, origin);
+                detailRow.task.needsPhoto ? (
+                  <>
+                    <p className="text-sm text-muted">
+                      しゃしんを とると おわりになります。
+                    </p>
+                    <PhotoButton
+                      label="しゃしんを とって やったにする"
+                      busy={action.busy}
+                      onPick={(file) => {
+                        const origin =
+                          pendingPhotoOrigin ??
+                          document
+                            .querySelector("#coin-target")
+                            ?.getBoundingClientRect() ??
+                          new DOMRect(0, 0, 0, 0);
+                        setDetailTaskId(null);
+                        setPendingPhotoOrigin(null);
+                        handleComplete(detailRow, origin, file);
+                      }}
+                    />
+                  </>
+                ) : (
+                  <Button
+                    block
+                    disabled={action.busy}
+                    onClick={(event) => {
+                      const origin = event.currentTarget.getBoundingClientRect();
+                      setDetailTaskId(null);
+                      handleComplete(detailRow, origin);
+                    }}
+                  >
+                    やったにする
+                  </Button>
+                )
+              ) : null}
+
+              {/* Any completion may carry a photo, required or not — and a
+                  blurry one can be retaken while it is still waiting. */}
+              {detailRow.entry && !isFuture ? (
+                <PhotoButton
+                  label={
+                    detailRow.entry.photoPath
+                      ? "しゃしんを とりなおす"
+                      : "しゃしんを つける"
+                  }
+                  busy={photoAction.busy}
+                  onPick={(file) => {
+                    const target = detailRow.entry;
+                    if (!target) return;
+                    void photoAction.run(() => setEntryPhoto(target, file));
                   }}
-                >
-                  やったにする
-                </Button>
+                />
+              ) : null}
+
+              {photoAction.error ? (
+                <Badge tone="late">{photoAction.error}</Badge>
               ) : null}
 
               {detailRow.entry && !isFuture ? (

@@ -27,6 +27,7 @@ import type { Entry, EntryStatus, Live, Task } from "../types";
 import { applyCoinMovement } from "./coins";
 import { coinDeltaForUndo, statusForTask } from "./entryRules";
 import { useLiveDocs } from "./live";
+import { deleteEntryPhoto, uploadEntryPhoto } from "./photos";
 import { clean } from "./sanitise";
 
 export { coinDeltaForUndo, statusForTask };
@@ -171,12 +172,20 @@ export async function completeTask(
   dateKey: string,
   actorUid: string,
   existing?: Entry | null,
+  /** Already uploaded by the caller; only the path is recorded here. */
+  photoPath?: string,
 ): Promise<EntryStatus> {
   if (existing && existing.status !== "rejected") return existing.status;
   const firestore = db();
   const { id, ...fields } = buildEntry(task, memberId, dateKey);
   const batch = writeBatch(firestore);
-  batch.set(doc(firestore, COL, id), clean(fields));
+  batch.set(
+    doc(firestore, COL, id),
+    clean({
+      ...fields,
+      ...(photoPath ? { photoPath, photoAt: serverTimestamp() } : {}),
+    }),
+  );
   if (fields.status === "approved" && task.coin !== 0) {
     applyCoinMovement(
       batch,
@@ -223,6 +232,31 @@ export async function undoEntry(entry: Entry, actorUid: string): Promise<void> {
     );
   }
   await batch.commit();
+
+  // After the commit, and deliberately not fatal: the entry is already gone,
+  // and a leftover object costs storage rather than correctness. Failing the
+  // undo over it would leave the user with a completion they cannot remove.
+  if (entry.photoPath) {
+    await deleteEntryPhoto(entry.photoPath).catch(() => {});
+  }
+}
+
+/**
+ * Attach or replace the photo on a completion that already exists.
+ *
+ * Upload first, then record: a path written before the object lands would
+ * point at nothing for as long as the upload takes.
+ */
+export async function setEntryPhoto(entry: Entry, file: File): Promise<void> {
+  const photoPath = await uploadEntryPhoto({
+    householdId: entry.householdId,
+    entryId: entry.id,
+    file,
+  });
+  await updateDoc(doc(db(), COL, entry.id), {
+    photoPath,
+    photoAt: serverTimestamp(),
+  });
 }
 
 /** Only a pending entry can be approved; approving twice would pay twice. */

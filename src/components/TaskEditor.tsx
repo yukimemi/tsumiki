@@ -76,6 +76,7 @@ const schema = z
       .min(0, "コインは 0いじょうです")
       .max(MAX_COIN, `コインは ${MAX_COIN}までです`),
     needsApproval: z.boolean(),
+    needsPhoto: z.boolean(),
     assigneeIds: z.array(z.string()),
     repeatType: z.enum(["once", "daily", "weekly", "monthly"]),
     weekdays: z.array(z.number().int().min(0).max(6)),
@@ -150,6 +151,7 @@ function valuesOf(task: Task | null): FormValues {
     coin: task?.coin ?? 1,
     // The safe default: coins arrive once a parent has looked.
     needsApproval: task?.needsApproval ?? true,
+    needsPhoto: task?.needsPhoto ?? false,
     assigneeIds: task?.assigneeIds ?? [],
     repeatType: repeat.type,
     weekdays:
@@ -178,6 +180,7 @@ function draftOf(values: FormValues, members: Member[]): TaskDraft {
     emoji: values.emoji,
     coin: values.coin,
     needsApproval: values.needsApproval,
+    needsPhoto: values.needsPhoto,
     // Someone who has left the household must not keep owning a chore.
     assigneeIds: values.assigneeIds.filter((uid) => known.has(uid)),
     repeat: repeatOf(values),
@@ -348,6 +351,21 @@ function TaskForm(props: {
               onChange={field.onChange}
               label="おやの しょうにんが いる"
               hint="しょうにんされてから コインが もらえます"
+            />
+          </Card>
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="needsPhoto"
+        render={({ field }) => (
+          <Card className="bg-sunk">
+            <Toggle
+              checked={field.value}
+              onChange={field.onChange}
+              label="しゃしんを とる"
+              hint="やったあとの しゃしんが しょうこに なります"
             />
           </Card>
         )}

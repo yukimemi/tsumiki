@@ -202,6 +202,17 @@ service cloud.firestore {
             || isParent(resource.data.householdId));
     }
 
+    // Attaching or retaking the proof photo. Only the two photo fields move,
+    // and only the person the completion belongs to or a parent may do it —
+    // a sibling cannot rewrite someone else's evidence.
+    function isPhotoUpdate() {
+      return isMember(resource.data.householdId)
+        && (resource.data.memberId == request.auth.uid
+            || isParent(resource.data.householdId))
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['photoPath', 'photoAt']);
+    }
+
     match /entries/{entryId} {
       allow read: if isMember(resource.data.householdId);
       // You may complete your own task, and a parent may tick one off for a
@@ -214,7 +225,10 @@ service cloud.firestore {
         && request.resource.data.status in ['pending', 'approved']
         && (!request.resource.data.keys().hasAny(['decidedBy', 'decidedAt'])
             || isParent(request.resource.data.householdId));
-      allow update: if isDecision() || isRedo() || isCommentCounterUpdate();
+      allow update: if isDecision()
+        || isRedo()
+        || isCommentCounterUpdate()
+        || isPhotoUpdate();
       // Undo removes your own entry. A parent may also take back one they
       // ticked off on a child's behalf — they were allowed to create it, so
       // refusing them the undo would strand it until someone approved it.
