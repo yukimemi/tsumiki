@@ -106,6 +106,32 @@ describe("todayRowsFor", () => {
     ).toHaveLength(0);
   });
 
+  it("keeps a once task on the day it was done so it can be taken back", () => {
+    // The bug this guards: a one-off retired from its own day the instant it
+    // went `pending`, which removed the row and with it the only undo. Two
+    // real entries sat in the queue that nobody could cancel.
+    const once = task({ repeat: { type: "once" }, needsApproval: true });
+    const waiting = entry("t1", "kid", "2026-08-23", "pending");
+    const rows = rowsFor({
+      tasks: [once],
+      entries: [waiting],
+      dateKey: "2026-08-23",
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].state).toBe("pending");
+    expect(rows[0].entry).toBe(waiting);
+
+    // Approved on its own day stays visible too — undo is still owed.
+    const done = entry("t1", "kid", "2026-08-23", "approved");
+    const sameDay = rowsFor({
+      tasks: [once],
+      entries: [done],
+      dateKey: "2026-08-23",
+    });
+    expect(sameDay).toHaveLength(1);
+    expect(sameDay[0].state).toBe("approved");
+  });
+
   it("keeps a rejected entry actionable so the task can be redone", () => {
     const bounced = entry("t1", "kid", TODAY, "rejected");
     const rows = rowsFor({ tasks: [task()], entries: [bounced] });

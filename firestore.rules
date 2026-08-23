@@ -210,11 +210,14 @@ service cloud.firestore {
         && (!request.resource.data.keys().hasAny(['decidedBy', 'decidedAt'])
             || isParent(request.resource.data.householdId));
       allow update: if isDecision() || isRedo() || isCommentCounterUpdate();
-      // Undo removes your own entry. The owner also deletes entries while
-      // cascading a household deletion.
+      // Undo removes your own entry. A parent may also take back one they
+      // ticked off on a child's behalf — they were allowed to create it, so
+      // refusing them the undo would strand it until someone approved it.
+      // (isOwner implies isParent, so the household-delete cascade still
+      // passes through here.)
       allow delete: if isMember(resource.data.householdId)
         && (resource.data.memberId == request.auth.uid
-            || isOwner(resource.data.householdId));
+            || isParent(resource.data.householdId));
     }
 
     match /comments/{commentId} {
@@ -280,7 +283,12 @@ service cloud.firestore {
         && request.resource.data.householdId == resource.data.householdId
         && request.resource.data.memberId == resource.data.memberId
         && request.resource.data.coins == resource.data.coins;
-      allow delete: if isParent(resource.data.householdId);
+      // A parent tidying up, or the requester taking back a request nobody has
+      // acted on yet. Once it is paid or refused it stays: that is history.
+      allow delete: if isParent(resource.data.householdId)
+        || (isMember(resource.data.householdId)
+            && resource.data.memberId == request.auth.uid
+            && resource.data.status == 'requested');
     }
   }
 }

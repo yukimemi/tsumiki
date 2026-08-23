@@ -24,6 +24,7 @@ import {
 import {
   adjustCoins,
   balanceOf,
+  cancelPayout,
   payPayout,
   rejectPayout,
   requestPayout,
@@ -210,6 +211,12 @@ export function CoinsScreen(): JSX.Element {
     celebrate("quake");
   };
 
+  const handleCancelPayout = async (payout: Payout): Promise<void> => {
+    const ok = await payAction.run(() => cancelPayout(payout, uid));
+    if (!ok) return;
+    celebrate("quake");
+  };
+
   const submitGrant = async (origin: DOMRect): Promise<void> => {
     const ok = await grantAction.run(() =>
       adjustCoins({
@@ -295,6 +302,21 @@ export function CoinsScreen(): JSX.Element {
                 ことわる
               </Button>
             </>
+          ) : null}
+
+          {/* The person who asked can take it back while nobody has acted on
+              it. Without this a mistaken request can only be cleared by a
+              parent, and a child is left staring at it. */}
+          {waiting && payout.memberId === uid ? (
+            <Button
+              variant="ghost"
+              size="md"
+              className={isParent ? undefined : "flex-1"}
+              disabled={payAction.busy}
+              onClick={() => void handleCancelPayout(payout)}
+            >
+              とりけす
+            </Button>
           ) : null}
         </div>
       </li>

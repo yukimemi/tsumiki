@@ -57,18 +57,23 @@ export function todayRowsFor(input: {
     const known = entries.filter(
       (entry) => entry.taskId === task.id && entry.memberId === memberId,
     );
+    const entry = known.find((candidate) => candidate.dateKey === dateKey) ?? null;
+
+    // A one-off does not come back once it has been done — but only on days
+    // other than the one it was done on. Retiring it from its own day too
+    // took the row away the instant it went `pending`, and with the row went
+    // the only way to take the completion back: the queue then had an entry
+    // nobody could cancel and only a parent could clear.
     if (
       task.repeat.type === "once" &&
+      entry === null &&
       known.some(
-        (entry) => entry.status === "approved" || entry.status === "pending",
+        (candidate) =>
+          candidate.status === "approved" || candidate.status === "pending",
       )
     ) {
-      // Done or awaiting a decision: a one-off never comes back. A rejected
-      // one-off falls through — a redo is still owed.
       continue;
     }
-
-    const entry = known.find((candidate) => candidate.dateKey === dateKey) ?? null;
     const state: TodayRow["state"] = entry
       ? entry.status
       : isOverdue(task, dateKey, today, nowHm)

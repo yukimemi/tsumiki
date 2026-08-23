@@ -12,6 +12,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   increment,
   limit,
@@ -212,6 +213,19 @@ export async function rejectPayout(payout: Payout, actorUid: string): Promise<vo
     decidedBy: actorUid,
     decidedAt: serverTimestamp(),
   });
+}
+
+/**
+ * Withdraw your own request before anyone has acted on it.
+ *
+ * Deleted rather than given a `cancelled` status: nothing moved. No coins left
+ * the balance and no ledger row was written, so there is no history here worth
+ * keeping — only a row that would sit in everyone's list forever. A parent
+ * turning a request down is different, and that one keeps its `rejected` row.
+ */
+export async function cancelPayout(payout: Payout, uid: string): Promise<void> {
+  if (payout.status !== "requested" || payout.memberId !== uid) return;
+  await deleteDoc(doc(db(), PAYOUTS, payout.id));
 }
 
 export function balanceOf(balances: Balance[], memberId: string): Balance | null {

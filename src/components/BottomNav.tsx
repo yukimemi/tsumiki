@@ -43,18 +43,24 @@ export function BottomNav({ pendingCount = 0 }: { pendingCount?: number }) {
                 }`
               }
             >
-              <span className="text-xl leading-none" aria-hidden="true">
-                {item.glyph}
+              {/* The badge hangs off the glyph, not off the link. The link is
+                  `flex-1`, so on anything wider than a phone it stretches and
+                  an `absolute right-*` badge drifts into the gap between two
+                  tabs. Anchored here it stays on the icon at any width. */}
+              <span className="relative inline-grid place-items-center">
+                <span className="text-xl leading-none" aria-hidden="true">
+                  {item.glyph}
+                </span>
+                {item.pending && pendingCount > 0 ? (
+                  <span className="absolute -right-4 -top-1.5">
+                    <Badge tone="wait" className="shadow-glow-wait">
+                      {pendingCount}
+                    </Badge>
+                    <span className="sr-only">けんの しょうにんまち</span>
+                  </span>
+                ) : null}
               </span>
               <span>{item.label}</span>
-              {item.pending && pendingCount > 0 ? (
-                <span className="absolute right-1.5 top-1">
-                  <Badge tone="wait" className="shadow-glow-wait">
-                    {pendingCount}
-                  </Badge>
-                  <span className="sr-only">けんの しょうにんまち</span>
-                </span>
-              ) : null}
             </NavLink>
           </li>
         ))}
