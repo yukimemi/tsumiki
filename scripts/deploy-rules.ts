@@ -57,7 +57,14 @@ const STORAGE_BUCKET = required(
 const token = () =>
   execSync("gcloud auth print-access-token", { encoding: "utf8" }).trim();
 
-async function api(method: string, path: string, body: unknown, t: string) {
+type ApiResult = { ok: true; body: unknown } | { ok: false; status: number; text: string };
+
+async function call(
+  method: string,
+  path: string,
+  body: unknown,
+  t: string,
+): Promise<ApiResult> {
   const url = `https://firebaserules.googleapis.com/v1/${path}`;
   const res = await fetch(url, {
     method,
@@ -68,9 +75,15 @@ async function api(method: string, path: string, body: unknown, t: string) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (!res.ok) return { ok: false, status: res.status, text: await res.text() };
+  return { ok: true, body: await res.json() };
+}
+
+async function api(method: string, path: string, body: unknown, t: string) {
+  const res = await call(method, path, body, t);
   if (!res.ok)
-    throw new Error(`${method} ${path}: ${res.status} ${await res.text()}`);
-  return res.json();
+    throw new Error(`${method} ${path}: ${res.status} ${res.text}`);
+  return res.body;
 }
 
 async function deploy(
@@ -91,17 +104,31 @@ async function deploy(
   const rulesetName = ruleset.name;
   console.log(`Created ruleset: ${rulesetName}`);
 
-  await api(
+  // A project that has never had rules published has no release to patch, and
+  // the API answers 404 rather than creating one. Fall back to a create so a
+  // freshly provisioned project works on the first run.
+  const release = {
+    name: `projects/${PROJECT_ID}/releases/${releaseName.replace("%2F", "/")}`,
+    rulesetName,
+  };
+
+  const patched = await call(
     "PATCH",
     `projects/${PROJECT_ID}/releases/${releaseName}`,
-    {
-      release: {
-        name: `projects/${PROJECT_ID}/releases/${releaseName.replace("%2F", "/")}`,
-        rulesetName,
-      },
-    },
+    { release },
     t,
   );
+
+  if (!patched.ok) {
+    if (patched.status !== 404) {
+      throw new Error(
+        `PATCH releases/${releaseName}: ${patched.status} ${patched.text}`,
+      );
+    }
+    await api("POST", `projects/${PROJECT_ID}/releases`, release, t);
+    console.log(`Created release: ${releaseName}`);
+    return;
+  }
   console.log(`Released to: ${releaseName}`);
 }
 

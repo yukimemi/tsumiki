@@ -41,3 +41,8 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 .firebase/
+
+# Vercel CLI link state. `.env*` is deliberately NOT repeated here: the pnpm
+# block above already ignores it and re-adds `!.env.example`, and a later
+# `.env*` would win and drop the example file from the repo.
+.vercel
