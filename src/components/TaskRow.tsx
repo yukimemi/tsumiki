@@ -32,6 +32,7 @@ export function TaskRow(props: {
   canUndo: boolean;
   onComplete(origin: DOMRect): void;
   onUndo(origin: DOMRect): void;
+  onOpenDetail(): void;
   onOpenComments(): void;
 }): JSX.Element {
   const { row, coinYen, busy = false, canUndo } = props;
@@ -64,18 +65,17 @@ export function TaskRow(props: {
         if (event.animationName === "tsu-stack") setStacking(false);
       }}
     >
+      {/* Reading and doing are different intentions and now different
+          targets. This one only opens the detail sheet: a long chore name is
+          clipped to two lines here, and tapping the row to finish reading it
+          used to tick the chore off instead. */}
       <button
         type="button"
-        disabled={busy || decided}
-        aria-label={
-          decided
-            ? `${task.title} は もう できたよ`
-            : `${task.title} を やったにする`
-        }
-        onClick={complete}
+        aria-label={`${task.title} を くわしく みる`}
+        onClick={() => props.onOpenDetail()}
         className={[
           "flex min-h-tap min-w-0 flex-1 items-center gap-3 rounded-card px-2 py-1 text-left",
-          "transition-colors active:bg-sunk disabled:opacity-70",
+          "transition-colors active:bg-sunk",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-self focus-visible:ring-offset-2 focus-visible:ring-offset-paper",
         ].join(" ")}
       >
@@ -84,7 +84,7 @@ export function TaskRow(props: {
         </span>
 
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-base font-bold text-ink">
+          <span className="line-clamp-2 text-base font-bold text-ink">
             {task.title}
           </span>
           {pill ? (
@@ -111,17 +111,30 @@ export function TaskRow(props: {
           size="sm"
           className="flex-none"
         />
+      </button>
 
-        <span
-          aria-hidden="true"
-          className={`grid h-11 w-11 flex-none place-items-center rounded-pill border-2 text-xl font-bold ${
-            state === "approved"
-              ? "border-done bg-done text-paper"
-              : state === "pending"
-                ? "border-wait bg-wait/15 text-wait"
-                : "border-rule-strong text-muted"
-          }`}
-        >
+      {/* The only thing that completes a chore. */}
+      <button
+        type="button"
+        disabled={busy || decided}
+        aria-label={
+          decided
+            ? `${task.title} は もう できたよ`
+            : `${task.title} を やったにする`
+        }
+        onClick={complete}
+        className={[
+          "grid h-11 w-11 flex-none place-items-center self-center rounded-pill border-2 text-xl font-bold",
+          "transition-transform active:scale-95 disabled:active:scale-100",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-self focus-visible:ring-offset-2 focus-visible:ring-offset-paper",
+          state === "approved"
+            ? "border-done bg-done text-paper"
+            : state === "pending"
+              ? "border-wait bg-wait/15 text-wait"
+              : "border-rule-strong text-muted",
+        ].join(" ")}
+      >
+        <span aria-hidden="true">
           {state === "approved" ? "✓" : state === "pending" ? "…" : ""}
         </span>
       </button>

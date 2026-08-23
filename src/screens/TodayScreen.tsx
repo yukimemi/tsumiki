@@ -7,6 +7,7 @@ import { TaskRow } from "../components/TaskRow";
 import {
   Avatar,
   Badge,
+  Button,
   Card,
   CoinAmount,
   EmptyState,
@@ -25,6 +26,7 @@ import { useTasks } from "../data/tasks";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
 import { addDaysKey, formatDateJa, nowHm, todayKey } from "../lib/date";
+import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import type { Entry } from "../types";
 import { progressOf, todayRowsFor } from "./today";
 import type { TodayRow } from "./today";
@@ -52,6 +54,10 @@ export function TodayScreen(): JSX.Element {
   // itself: the entry is re-derived below, so an undo while the sheet is open
   // closes it instead of leaving a thread hanging off a deleted completion.
   const [commentsTaskId, setCommentsTaskId] = useState<string | null>(null);
+  // Which task's detail sheet is open. Held as an id, like the comments sheet,
+  // so the row is re-derived from live data and the sheet follows a completion
+  // or an undo instead of showing a stale snapshot.
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
 
   // A parent who switched to someone who has since left falls back to self.
   const shownMemberId = members.some((member) => member.uid === pickedMemberId)
@@ -92,6 +98,8 @@ export function TodayScreen(): JSX.Element {
     rows.find((row) => row.task.id === commentsTaskId && row.entry !== null) ??
     null;
   const commentsEntry = commentsRow?.entry ?? null;
+
+  const detailRow = rows.find((row) => row.task.id === detailTaskId) ?? null;
 
   const handleComplete = (row: TodayRow, origin: DOMRect): void => {
     void action.run(async () => {
@@ -274,6 +282,7 @@ export function TodayScreen(): JSX.Element {
                 onUndo={() => {
                   if (row.entry) handleUndo(row.entry);
                 }}
+                onOpenDetail={() => setDetailTaskId(row.task.id)}
                 onOpenComments={() => {
                   if (row.entry) setCommentsTaskId(row.task.id);
                 }}
@@ -282,6 +291,126 @@ export function TodayScreen(): JSX.Element {
           ))}
         </ul>
       )}
+
+      <Sheet
+        open={detailRow !== null}
+        onClose={() => setDetailTaskId(null)}
+        title="やることの しょうさい"
+      >
+        {detailRow ? (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3">
+              <span className="flex-none text-4xl" aria-hidden="true">
+                {detailRow.task.emoji}
+              </span>
+              {/* No clamp here — reading the whole name is the point. */}
+              <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-ink">
+                {detailRow.task.title}
+              </h3>
+            </div>
+
+            {detailRow.task.note ? (
+              <p className="whitespace-pre-wrap rounded-card bg-sunk p-3 text-sm leading-relaxed text-ink">
+                {detailRow.task.note}
+              </p>
+            ) : null}
+
+            <dl className="space-y-2 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted">もらえる コイン</dt>
+                <dd>
+                  <CoinAmount
+                    coins={detailRow.task.coin}
+                    yen={
+                      coinYen > 0 ? detailRow.task.coin * coinYen : undefined
+                    }
+                    size="sm"
+                  />
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted">くりかえし</dt>
+                <dd className="font-bold text-ink">
+                  {repeatLabelJa(detailRow.task.repeat)}
+                </dd>
+              </div>
+              {detailRow.task.dueTime ? (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted">じかん</dt>
+                  <dd className="font-bold text-ink">
+                    {detailRow.task.dueTime} まで
+                  </dd>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted">だれが やる</dt>
+                <dd className="font-bold text-ink">
+                  {assigneeLabelJa(detailRow.task, members)}
+                </dd>
+              </div>
+              {detailRow.task.needsApproval ? (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted">しょうにん</dt>
+                  <dd>
+                    <Badge tone="wait">おうちのひとが みてから</Badge>
+                  </dd>
+                </div>
+              ) : null}
+            </dl>
+
+            {detailRow.entry?.rejectReason ? (
+              <p className="rounded-card border border-rule bg-sunk p-3 text-sm text-ink">
+                <span className="font-bold">もういちど: </span>
+                {detailRow.entry.rejectReason}
+              </p>
+            ) : null}
+
+            <div className="flex flex-col gap-2">
+              {detailRow.entry === null && !isFuture ? (
+                <Button
+                  block
+                  disabled={action.busy}
+                  onClick={(event) => {
+                    const origin = event.currentTarget.getBoundingClientRect();
+                    setDetailTaskId(null);
+                    handleComplete(detailRow, origin);
+                  }}
+                >
+                  やったにする
+                </Button>
+              ) : null}
+
+              {detailRow.entry && !isFuture ? (
+                <Button
+                  variant="ghost"
+                  block
+                  disabled={action.busy}
+                  onClick={() => {
+                    const target = detailRow.entry;
+                    setDetailTaskId(null);
+                    if (target) handleUndo(target);
+                  }}
+                >
+                  とりけす
+                </Button>
+              ) : null}
+
+              {detailRow.entry ? (
+                <Button
+                  variant="ghost"
+                  block
+                  onClick={() => {
+                    setDetailTaskId(null);
+                    setCommentsTaskId(detailRow.task.id);
+                  }}
+                >
+                  コメントを みる
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </Sheet>
 
       <Sheet
         open={commentsEntry !== null}

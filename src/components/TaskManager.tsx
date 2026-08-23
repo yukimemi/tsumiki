@@ -7,9 +7,9 @@ import {
   softDeleteTask,
   useAllTasks,
 } from "../data/tasks";
-import { WEEKDAY_LABELS_JA } from "../lib/date";
+import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import { useAction } from "../screens/useAction";
-import type { MemberInfo, RepeatRule, Role, Task } from "../types";
+import type { MemberInfo, Role, Task } from "../types";
 import { TaskEditor } from "./TaskEditor";
 import {
   Badge,
@@ -29,44 +29,6 @@ import {
  */
 
 type Member = { uid: string; role: Role; info: MemberInfo };
-
-function ascending(a: number, b: number): number {
-  return a - b;
-}
-
-function repeatLabel(repeat: RepeatRule): string {
-  switch (repeat.type) {
-    case "once":
-      return "1かいだけ";
-    case "daily":
-      return "まいにち";
-    case "weekly": {
-      const days = [...repeat.weekdays]
-        .sort(ascending)
-        .map((weekday) => WEEKDAY_LABELS_JA[weekday])
-        .join("・");
-      return days ? `まいしゅう ${days}` : "まいしゅう";
-    }
-    case "monthly": {
-      const days = [...repeat.days]
-        .sort(ascending)
-        .map((day) => `${day}日`)
-        .join("・");
-      return days ? `まいつき ${days}` : "まいつき";
-    }
-  }
-}
-
-function assigneeLabel(task: Task, members: Member[]): string {
-  if (task.assigneeIds.length === 0) return "みんな";
-  return task.assigneeIds
-    .map(
-      (uid) =>
-        members.find((member) => member.uid === uid)?.info.displayName ??
-        "いない ひと",
-    )
-    .join("・");
-}
 
 export function TaskManager(props: {
   householdId: string;
@@ -142,11 +104,11 @@ export function TaskManager(props: {
           </div>
 
           <p className="mt-0.5 text-sm text-muted">
-            {repeatLabel(task.repeat)}
+            {repeatLabelJa(task.repeat)}
             {task.dueTime ? ` ・ ${task.dueTime}まで` : ""}
           </p>
           <p className="text-sm text-muted">
-            やるひと: {assigneeLabel(task, members)}
+            やるひと: {assigneeLabelJa(task, members)}
           </p>
         </div>
 
