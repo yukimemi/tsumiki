@@ -24,6 +24,15 @@ export const QUAKE_MS = 240;
 /** Approved: the waiting badge pops and turns --done. */
 export const POP_MS = 260;
 
+/**
+ * Sent for approval: a wish rises from the row.
+ *
+ * A task that needs a parent pays nothing yet, so `coinfly` would be a
+ * lie — gold means coins are in the bank. This is the same beat in the
+ * `--wait` slot instead: something left the row and went to ask.
+ */
+export const WISH_MS = 820;
+
 /** How long a run of completions stays a run. */
 export const COMBO_WINDOW_MS = 1600;
 
@@ -46,4 +55,10 @@ export const QUAKE_CLASSES: readonly [string, string] = [
   "tsu-quake-b",
 ];
 
-export type CelebrationKind = "stack" | "coinfly" | "burst" | "quake" | "pop";
+export type CelebrationKind =
+  | "stack"
+  | "coinfly"
+  | "wish"
+  | "burst"
+  | "quake"
+  | "pop";

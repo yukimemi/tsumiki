@@ -70,7 +70,10 @@ export function ColorPicker({
   return (
     <div role="radiogroup" aria-label="いろ" className="flex flex-wrap gap-2">
       {MEMBER_COLORS.map((color) => (
-        <label key={color} className="block">
+        // `relative` keeps the `sr-only` radio's absolute box inside this
+        // label. See the same note in ui.tsx SegmentedControl: an unpositioned
+        // ancestor makes the radio extend the document and scroll the shell.
+        <label key={color} className="relative block">
           <input
             type="radio"
             name={group}

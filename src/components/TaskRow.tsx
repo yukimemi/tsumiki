@@ -89,7 +89,7 @@ export function TaskRow(props: {
           </span>
           {pill ? (
             <span
-              className={`mt-0.5 inline-flex items-center rounded-pill border px-2 py-0.5 text-xs font-bold ${
+              className={`mt-0.5 inline-flex items-center whitespace-nowrap rounded-pill border px-2 py-0.5 text-xs font-bold ${
                 {
                   neutral: "border-rule bg-sunk text-muted",
                   coin: "border-coin/40 bg-coin/15 text-ink",

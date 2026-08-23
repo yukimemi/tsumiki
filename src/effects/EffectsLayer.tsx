@@ -45,10 +45,18 @@ export type PopMark = {
   y: number;
 };
 
+/** A completion that went to a parent instead of to the bank. */
+export type WishMark = {
+  id: number;
+  x: number;
+  y: number;
+};
+
 export type EffectsLayerProps = {
   bursts: readonly number[];
   flights: readonly CoinFlight[];
   marks: readonly PopMark[];
+  wishes: readonly WishMark[];
   combo: number;
 };
 
@@ -102,6 +110,7 @@ export function EffectsLayer({
   bursts,
   flights,
   marks,
+  wishes,
   combo,
 }: EffectsLayerProps) {
   return (
@@ -123,6 +132,19 @@ export function EffectsLayer({
           }
         >
           ✓
+        </span>
+      ))}
+
+      {wishes.map((wish) => (
+        <span
+          key={wish.id}
+          className="tsu-wish"
+          style={
+            { "--x": `${wish.x}px`, "--y": `${wish.y}px` } as CSSProperties
+          }
+        >
+          <span className="tsu-wish-glyph">🙏</span>
+          <span className="tsu-wish-word">おねがい！</span>
         </span>
       ))}
 

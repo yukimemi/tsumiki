@@ -788,7 +788,13 @@ export function SegmentedControl<T extends string>({
       )}
     >
       {options.map((option) => (
-        <label key={option.value} className="flex-1">
+        // `relative` is load-bearing, not cosmetic. `sr-only` positions the
+        // real radio absolutely; without a positioned ancestor it resolves
+        // against the initial containing block, lands at its static offset
+        // far down the document, and stretches the page to reach it. The
+        // browser then scrolls the *document* to focus it, dragging the whole
+        // app shell — bottom nav included — off screen.
+        <label key={option.value} className="relative flex-1">
           <input
             type="radio"
             name={group}

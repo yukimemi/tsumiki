@@ -11,10 +11,11 @@ import {
   POP_MS,
   QUAKE_CLASSES,
   QUAKE_MS,
+  WISH_MS,
 } from "./effects";
 import type { CelebrationKind } from "./effects";
 import { COIN_STAGGER_MS, EffectsLayer, MAX_COIN_GLYPHS } from "./EffectsLayer";
-import type { CoinFlight, PopMark } from "./EffectsLayer";
+import type { CoinFlight, PopMark, WishMark } from "./EffectsLayer";
 
 /**
  * The single kill switch.
@@ -40,6 +41,7 @@ export function EffectsProvider({ children }: { children: ReactNode }) {
   const [bursts, setBursts] = useState<number[]>([]);
   const [flights, setFlights] = useState<CoinFlight[]>([]);
   const [marks, setMarks] = useState<PopMark[]>([]);
+  const [wishes, setWishes] = useState<WishMark[]>([]);
   const [combo, setCombo] = useState(0);
 
   const seq = useRef(0);
@@ -172,6 +174,18 @@ export function EffectsProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
+
+        case "wish": {
+          const rect = options?.origin ?? null;
+          const from = rect
+            ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+            : { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+          setWishes((current) => [...current, { id, x: from.x, y: from.y }]);
+          after(WISH_MS + 40, () => {
+            setWishes((current) => current.filter((w) => w.id !== id));
+          });
+          return;
+        }
       }
     },
     [after],
@@ -189,6 +203,7 @@ export function EffectsProvider({ children }: { children: ReactNode }) {
         bursts={bursts}
         flights={flights}
         marks={marks}
+        wishes={wishes}
         combo={combo}
       />
     </EffectsContext.Provider>

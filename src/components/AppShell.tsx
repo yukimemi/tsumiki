@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { useUid } from "../auth/context";
 import { balanceOf, useBalances } from "../data/coins";
@@ -6,6 +6,53 @@ import { usePendingEntries } from "../data/entries";
 import { useHousehold } from "../household/context";
 import { BottomNav } from "./BottomNav";
 import { Avatar, CoinAmount } from "./ui";
+
+/** Inputs that open a software keyboard. A radio or a checkbox does not. */
+const TEXTUAL_INPUT: Record<string, true> = {
+  text: true,
+  search: true,
+  email: true,
+  url: true,
+  tel: true,
+  number: true,
+  password: true,
+  time: true,
+  date: true,
+};
+
+function isTextual(node: Element | null): boolean {
+  if (node instanceof HTMLTextAreaElement) return true;
+  if (node instanceof HTMLInputElement) return TEXTUAL_INPUT[node.type] === true;
+  return false;
+}
+
+/**
+ * True while a field that raises the keyboard has focus.
+ *
+ * On a phone the five tabs are dead weight mid-sentence: they eat a row of
+ * an already short viewport and, in browsers that shrink the layout viewport
+ * for the keyboard, they ride up and sit on top of it. Standing the nav down
+ * while typing is both the tidier layout and the cheaper fix.
+ */
+function useTypingFocus(): boolean {
+  const [typing, setTyping] = useState(false);
+
+  useEffect(() => {
+    // `focusout` fires before the next element takes focus, so the answer is
+    // only correct one task later.
+    const sync = () => {
+      queueMicrotask(() => setTyping(isTextual(document.activeElement)));
+    };
+    document.addEventListener("focusin", sync);
+    document.addEventListener("focusout", sync);
+    return () => {
+      document.removeEventListener("focusin", sync);
+      document.removeEventListener("focusout", sync);
+    };
+  }, []);
+
+  return typing;
+}
 
 /**
  * The phone frame: a header that never scrolls, a body that does, and the
@@ -35,6 +82,7 @@ export function AppShell({
   const balances = useBalances(householdId);
   // Only a parent can act on the queue, so only a parent is told its size.
   const pending = usePendingEntries(isParent ? householdId : null);
+  const typing = useTypingFocus();
 
   const me = members.find((member) => member.uid === uid) ?? null;
   const coins = balanceOf(balances.data, uid)?.coins ?? 0;
@@ -69,7 +117,9 @@ export function AppShell({
         {children}
       </main>
 
-      <BottomNav pendingCount={isParent ? pending.data.length : 0} />
+      {typing ? null : (
+        <BottomNav pendingCount={isParent ? pending.data.length : 0} />
+      )}
     </div>
   );
 }

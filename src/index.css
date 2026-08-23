@@ -132,6 +132,10 @@ body,
 #root {
   height: 100dvh;
   margin: 0;
+  /* The shell owns every scrollport it needs. Nothing should ever scroll the
+     document itself: when it does, the whole frame — bottom nav included —
+     slides out of view. */
+  overflow: hidden;
 }
 
 body {
@@ -147,7 +151,6 @@ body {
 #root {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 ::selection {
@@ -175,10 +178,12 @@ body {
     padding-right: env(safe-area-inset-right);
   }
 
-  /* Scroll clearance for the bottom nav: its height, the inset it sits
-     on, and a thumb's worth of slack. */
+  /* The nav sits in normal flow and already occupies its own height, so this
+     is only a thumb's worth of slack at the end of a list — not clearance for
+     an overlay. Reserving the nav height here too left ~137px of dead space
+     under every screen. */
   .pad-nav {
-    padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px);
+    padding-bottom: 16px;
   }
 
   /*
@@ -375,6 +380,58 @@ body {
   color: var(--coin);
   text-shadow: 0 0 calc(10px * var(--glow)) rgb(from var(--coin) r g b / 0.9);
   animation: tsu-coinfly 700ms cubic-bezier(0.35, 0, 0.25, 1) both;
+}
+
+/*
+ * wish — a completion that still needs a parent.
+ *
+ * Deliberately not the coin flight: gold is coins in the bank, and this
+ * task has not paid yet. It rises out of the row and drifts off the top
+ * of the screen instead of landing on the balance, because what left the
+ * row was a request, not a reward.
+ */
+.tsu-wish {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  opacity: 0;
+  animation: tsu-wish 820ms cubic-bezier(0.25, 0.9, 0.3, 1) both;
+}
+
+.tsu-wish-glyph {
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 0 calc(10px * var(--glow)) rgb(from var(--wait) r g b / 0.85));
+}
+
+.tsu-wish-word {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--wait);
+  text-shadow: 0 0 calc(10px * var(--glow)) rgb(from var(--wait) r g b / 0.9);
+}
+
+@keyframes tsu-wish {
+  0% {
+    transform: translate(-50%, -40%) scale(0.7);
+    opacity: 0;
+  }
+  18% {
+    transform: translate(-50%, -60%) scale(calc(1 + 0.12 * var(--fx)));
+    opacity: 1;
+  }
+  70% {
+    transform: translate(-50%, calc(-60% - 46px * var(--fx))) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, calc(-60% - 96px * var(--fx))) scale(0.9);
+    opacity: 0;
+  }
 }
 
 /*
@@ -602,6 +659,7 @@ body {
   .tsu-coin,
   .tsu-coin-label,
   .tsu-mark,
+  .tsu-wish,
   .tsu-combo {
     animation: none !important;
     transition: none !important;

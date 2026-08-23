@@ -104,10 +104,13 @@ export function TodayScreen(): JSX.Element {
       );
       celebrate("stack", { origin });
       // Pending coins are a promise, not earnings: only an approved landing
-      // gets the coin flight and the shockwave.
+      // gets the coin flight and the shockwave. A pending one still gets an
+      // answer back — the wish — so a tap is never met with silence.
       if (status === "approved") {
         celebrate("coinfly", { coin: row.task.coin, origin });
         celebrate("burst", { origin });
+      } else {
+        celebrate("wish", { origin });
       }
     });
   };
