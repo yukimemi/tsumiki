@@ -295,9 +295,20 @@ service cloud.firestore {
       allow read: if isMember(resource.data.householdId);
       // Anyone may ask to exchange their own coins; nobody may file a request
       // that is already decided.
+      //
+      // The household's floor and step are checked here as well as in the UI.
+      // The yen figure is the coin count times the rate, so both rules are
+      // expressed against that product rather than against the coins.
       allow create: if isMember(request.resource.data.householdId)
         && request.resource.data.memberId == request.auth.uid
-        && request.resource.data.status == 'requested';
+        && request.resource.data.status == 'requested'
+        && request.resource.data.coins > 0
+        && request.resource.data.coins * hh(request.resource.data.householdId).coinYen
+             >= hh(request.resource.data.householdId).get('payoutMinYen', 0)
+        && (hh(request.resource.data.householdId).get('payoutStepYen', 0) == 0
+            || (request.resource.data.coins
+                  * hh(request.resource.data.householdId).coinYen)
+                 % hh(request.resource.data.householdId).get('payoutStepYen', 0) == 0);
       allow update: if isParent(resource.data.householdId)
         && request.resource.data.householdId == resource.data.householdId
         && request.resource.data.memberId == resource.data.memberId

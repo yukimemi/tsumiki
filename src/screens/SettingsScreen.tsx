@@ -18,6 +18,7 @@ import {
 } from "../components/ui";
 import { deleteHousehold, updateHousehold } from "../data/households";
 import { useHousehold } from "../household/context";
+import { payoutPlan } from "../lib/payout";
 import { useAction } from "./useAction";
 
 /**
@@ -43,6 +44,8 @@ export function SettingsScreen() {
         householdId={household.id}
         name={household.name}
         coinYen={household.coinYen}
+        payoutMinYen={household.payoutMinYen ?? 0}
+        payoutStepYen={household.payoutStepYen ?? 0}
         canEdit={isOwner}
       />
 
@@ -128,6 +131,8 @@ function HouseholdCard(props: {
   householdId: string;
   name: string;
   coinYen: number;
+  payoutMinYen: number;
+  payoutStepYen: number;
   canEdit: boolean;
 }) {
   const action = useAction();
@@ -135,17 +140,39 @@ function HouseholdCard(props: {
   // household switch is the router's job, not an effect's.
   const [name, setName] = useState(props.name);
   const [coinYen, setCoinYen] = useState(String(props.coinYen));
+  const [minYen, setMinYen] = useState(String(props.payoutMinYen));
+  const [stepYen, setStepYen] = useState(String(props.payoutStepYen));
 
   const parsedRate = Number.parseInt(coinYen, 10);
+  const parsedMin = Number.parseInt(minYen, 10);
+  const parsedStep = Number.parseInt(stepYen, 10);
   const rateValid = Number.isFinite(parsedRate) && parsedRate >= 0;
-  const dirty = name.trim() !== props.name || parsedRate !== props.coinYen;
+  const minValid = Number.isFinite(parsedMin) && parsedMin >= 0;
+  const stepValid = Number.isFinite(parsedStep) && parsedStep >= 0;
+  const valid = rateValid && minValid && stepValid;
+  const dirty =
+    name.trim() !== props.name ||
+    parsedRate !== props.coinYen ||
+    parsedMin !== props.payoutMinYen ||
+    parsedStep !== props.payoutStepYen;
+
+  // What the rules actually resolve to in coins, shown so a parent is never
+  // surprised by the arithmetic between yen and whole coins.
+  const preview = payoutPlan({
+    balanceCoins: Number.MAX_SAFE_INTEGER,
+    coinYen: rateValid ? parsedRate : 0,
+    minYen: minValid ? parsedMin : 0,
+    stepYen: stepValid ? parsedStep : 0,
+  });
 
   const save = () => {
-    if (!rateValid || name.trim().length === 0) return;
+    if (!valid || name.trim().length === 0) return;
     void action.run(() =>
       updateHousehold(props.householdId, {
         name: name.trim(),
         coinYen: parsedRate,
+        payoutMinYen: parsedMin,
+        payoutStepYen: parsedStep,
       }),
     );
   };
@@ -180,11 +207,39 @@ function HouseholdCard(props: {
             />
           </Field>
 
+          <Field
+            label="こうかんは なん円から"
+            hint="0 に すると いくらでも こうかんできます"
+            error={minValid ? undefined : "すうじで いれてください"}
+          >
+            <Input
+              inputMode="numeric"
+              value={minYen}
+              onChange={(event) => setMinYen(event.target.value)}
+            />
+          </Field>
+
+          <Field
+            label="なん円ずつ こうかんする"
+            hint={
+              valid && parsedStep > 0
+                ? `${preview.stepCoins}コイン（${preview.stepCoins * parsedRate}円）ずつ、さいてい ${preview.minCoins}コイン`
+                : "0 に すると 1コインたんいで こうかんできます"
+            }
+            error={stepValid ? undefined : "すうじで いれてください"}
+          >
+            <Input
+              inputMode="numeric"
+              value={stepYen}
+              onChange={(event) => setStepYen(event.target.value)}
+            />
+          </Field>
+
           {action.error ? <Badge tone="late">{action.error}</Badge> : null}
 
           <Button
             onClick={save}
-            disabled={!dirty || !rateValid || action.busy}
+            disabled={!dirty || !valid || action.busy}
             block
           >
             ほぞんする
@@ -200,6 +255,15 @@ function HouseholdCard(props: {
             <dt className="text-muted">1コイン</dt>
             <dd className="font-bold text-ink">{props.coinYen}円</dd>
           </div>
+          {props.payoutMinYen > 0 ? (
+            <div className="flex justify-between">
+              <dt className="text-muted">こうかん</dt>
+              <dd className="font-bold text-ink">
+                {props.payoutMinYen}円から
+                {props.payoutStepYen > 0 ? ` ${props.payoutStepYen}円ずつ` : ""}
+              </dd>
+            </div>
+          ) : null}
         </dl>
       )}
     </Card>

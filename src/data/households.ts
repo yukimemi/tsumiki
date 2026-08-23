@@ -82,7 +82,9 @@ export async function createHousehold(
 
 export async function updateHousehold(
   id: string,
-  patch: Partial<Pick<Household, "name" | "coinYen">>,
+  patch: Partial<
+    Pick<Household, "name" | "coinYen" | "payoutMinYen" | "payoutStepYen">
+  >,
 ): Promise<void> {
   await updateDoc(doc(db(), COL, id), forMerge(patch));
 }

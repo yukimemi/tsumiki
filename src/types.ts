@@ -61,6 +61,16 @@ export type Household = {
   pendingRoles?: Record<string, Role>;
   /** Exchange rate: one coin is worth this many yen. */
   coinYen: number;
+  /**
+   * Exchange floor and granularity, in yen, both optional.
+   *
+   * Kept in yen because that is the unit a parent decides in ("from 50 yen,
+   * in 50 yen steps"); `src/lib/payout.ts` converts to whole coins. Absent or
+   * zero means no constraint, which is what every household created before
+   * this existed gets.
+   */
+  payoutMinYen?: number;
+  payoutStepYen?: number;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };

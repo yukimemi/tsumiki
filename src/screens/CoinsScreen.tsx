@@ -36,6 +36,7 @@ import { approveEntry, rejectEntry, usePendingEntries } from "../data/entries";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
 import { dateKeyOf, formatDateJa } from "../lib/date";
+import { clampToPlan, payoutPlan } from "../lib/payout";
 import type { Entry, LedgerEntry, LedgerReason, Payout } from "../types";
 import { useAction } from "./useAction";
 
@@ -154,7 +155,15 @@ export function CoinsScreen(): JSX.Element {
   );
 
   // Clamped during render: the balance moves under the sheet while it is open.
-  const payoutCoins = Math.min(Math.max(1, payoutDraft), Math.max(1, myCoins));
+  const plan = payoutPlan({
+    balanceCoins: myCoins,
+    coinYen,
+    minYen: household?.payoutMinYen,
+    stepYen: household?.payoutStepYen,
+  });
+  // Clamped during render: the balance moves under the sheet while it is open,
+  // and so does the plan if a parent edits the rule.
+  const payoutCoins = clampToPlan(payoutDraft, plan);
   const payoutYen = payoutCoins * coinYen;
 
   const grantMember = grantMemberId || (members[0]?.uid ?? "");
@@ -420,19 +429,34 @@ export function CoinsScreen(): JSX.Element {
         <h2 className="text-base font-bold text-ink">おこづかいに かえる</h2>
         <p className="mt-1 text-sm text-muted">
           1コインは {coinYen}円。おうちのひとが わたしてくれるよ。
+          {household?.payoutMinYen ? (
+            <>
+              <br />
+              {household.payoutMinYen}円から
+              {household.payoutStepYen
+                ? `、${household.payoutStepYen}円ずつ`
+                : null}
+              こうかんできます。
+            </>
+          ) : null}
         </p>
         <Button
           variant="coin"
           block
           className="mt-3"
-          disabled={myCoins <= 0}
-          onClick={() => setPayoutOpen(true)}
+          disabled={!plan.canRequest}
+          onClick={() => {
+            setPayoutDraft(plan.minCoins);
+            setPayoutOpen(true);
+          }}
         >
           こうかんを おねがいする
         </Button>
-        {myCoins <= 0 ? (
+        {!plan.canRequest ? (
           <p className="mt-2 text-sm text-muted">
-            コインが たまったら かえられます
+            {household?.payoutMinYen
+              ? `あと ${Math.max(0, plan.minCoins - myCoins)}コインで こうかんできるよ`
+              : "コインが たまったら かえられます"}
           </p>
         ) : null}
       </Card>
@@ -537,7 +561,7 @@ export function CoinsScreen(): JSX.Element {
           <Button
             variant="coin"
             block
-            disabled={payoutAction.busy || myCoins <= 0}
+            disabled={payoutAction.busy || !plan.canRequest}
             onClick={() => void submitPayout()}
           >
             {payoutCoins}コインを おねがいする
@@ -548,9 +572,9 @@ export function CoinsScreen(): JSX.Element {
           <Field label="なんコイン かえる？" group>
             <div className="flex items-center justify-center gap-4">
               <IconButton
-                label="1へらす"
-                disabled={payoutCoins <= 1}
-                onClick={() => setPayoutDraft(payoutCoins - 1)}
+                label={`${plan.stepCoins}へらす`}
+                disabled={payoutCoins <= plan.minCoins}
+                onClick={() => setPayoutDraft(payoutCoins - plan.stepCoins)}
               >
                 −
               </IconButton>
@@ -561,9 +585,9 @@ export function CoinsScreen(): JSX.Element {
                 {payoutCoins}
               </span>
               <IconButton
-                label="1ふやす"
-                disabled={payoutCoins >= myCoins}
-                onClick={() => setPayoutDraft(payoutCoins + 1)}
+                label={`${plan.stepCoins}ふやす`}
+                disabled={payoutCoins >= plan.maxCoins}
+                onClick={() => setPayoutDraft(payoutCoins + plan.stepCoins)}
               >
                 ＋
               </IconButton>
@@ -573,12 +597,19 @@ export function CoinsScreen(): JSX.Element {
           <div className="flex flex-wrap justify-center gap-2">
             <Chip
               tone="coin"
-              selected={payoutCoins === myCoins}
-              onClick={() => setPayoutDraft(myCoins)}
+              selected={payoutCoins === plan.maxCoins}
+              onClick={() => setPayoutDraft(plan.maxCoins)}
             >
               ぜんぶ
             </Chip>
-            {QUICK_COINS.filter((amount) => amount <= myCoins).map((amount) => (
+            {/* Quick amounts have to land on a step too, or tapping one would
+                silently snap to a different number than the chip shows. */}
+            {QUICK_COINS.filter(
+              (amount) =>
+                amount >= plan.minCoins &&
+                amount <= plan.maxCoins &&
+                amount % plan.stepCoins === 0,
+            ).map((amount) => (
               <Chip
                 key={amount}
                 tone="coin"
