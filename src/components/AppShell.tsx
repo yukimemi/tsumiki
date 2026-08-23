@@ -27,31 +27,51 @@ function isTextual(node: Element | null): boolean {
 }
 
 /**
- * True while a field that raises the keyboard has focus.
- *
- * On a phone the five tabs are dead weight mid-sentence: they eat a row of
- * an already short viewport and, in browsers that shrink the layout viewport
- * for the keyboard, they ride up and sit on top of it. Standing the nav down
- * while typing is both the tidier layout and the cheaper fix.
+ * How much of the visual viewport the keyboard has to swallow before we
+ * believe it. Browser chrome sliding in and out moves this by a little; a
+ * software keyboard takes a third of the screen or more.
  */
-function useTypingFocus(): boolean {
-  const [typing, setTyping] = useState(false);
+const KEYBOARD_MIN_RATIO = 0.25;
+
+/**
+ * True while the software keyboard is actually covering the screen.
+ *
+ * This asks the visual viewport rather than asking who has focus, and that
+ * distinction is the whole point. Focus is a latch: dismissing the keyboard
+ * with Android's back gesture leaves the field focused, so a focus-driven
+ * check stays true after the keyboard is gone and the five tabs never come
+ * back — which is exactly how the nav went missing in the installed PWA.
+ * Viewport height is not a latch. It reports what is on screen right now,
+ * and every route back to a full-height viewport fires `resize`.
+ *
+ * It also fails in the safe direction: no `visualViewport`, no hiding.
+ */
+function useKeyboardOpen(): boolean {
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    // `focusout` fires before the next element takes focus, so the answer is
-    // only correct one task later.
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
     const sync = () => {
-      queueMicrotask(() => setTyping(isTextual(document.activeElement)));
+      const hidden = window.innerHeight - viewport.height;
+      const covered = hidden > window.innerHeight * KEYBOARD_MIN_RATIO;
+      // A shrunken viewport with nothing focused is a browser-UI artefact,
+      // not a keyboard, so both have to agree before the nav stands down.
+      setOpen(covered && isTextual(document.activeElement));
     };
+
+    viewport.addEventListener("resize", sync);
     document.addEventListener("focusin", sync);
     document.addEventListener("focusout", sync);
     return () => {
+      viewport.removeEventListener("resize", sync);
       document.removeEventListener("focusin", sync);
       document.removeEventListener("focusout", sync);
     };
   }, []);
 
-  return typing;
+  return open;
 }
 
 /**
@@ -82,7 +102,7 @@ export function AppShell({
   const balances = useBalances(householdId);
   // Only a parent can act on the queue, so only a parent is told its size.
   const pending = usePendingEntries(isParent ? householdId : null);
-  const typing = useTypingFocus();
+  const keyboardOpen = useKeyboardOpen();
 
   const me = members.find((member) => member.uid === uid) ?? null;
   const coins = balanceOf(balances.data, uid)?.coins ?? 0;
@@ -117,7 +137,7 @@ export function AppShell({
         {children}
       </main>
 
-      {typing ? null : (
+      {keyboardOpen ? null : (
         <BottomNav pendingCount={isParent ? pending.data.length : 0} />
       )}
     </div>
