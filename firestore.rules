@@ -1,0 +1,286 @@
+rules_version = '2';
+
+// tsumiki security rules.
+//
+// Data model: flat top-level collections, each child document carrying a
+// `householdId` FK, so every membership decision is one get() of the parent
+// household document (see docs/DESIGN.md).
+//
+// Bootstrap: `config/access` must exist and list the first user's email before
+// anyone can create a household. Seed it once from the console; from then on
+// invites grow the list.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null
+        && request.auth.token.email_verified == true;
+    }
+
+    // Every email the client stores (allowedEmails, invitedEmails, grants,
+    // pendingRoles keys) is lowercased, so compare against a lowercased claim.
+    function userEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function accessConfig() {
+      return get(/databases/$(database)/documents/config/access).data;
+    }
+
+    // Global gate: the project is private, only listed emails may write.
+    function isAllowedEmail() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/config/access)
+        && (userEmail() in accessConfig().get('allowedEmails', [])
+            || userEmail() in accessConfig().get('adminEmails', []));
+    }
+
+    function hhExists(id) {
+      return exists(/databases/$(database)/documents/households/$(id));
+    }
+
+    function hh(id) {
+      return get(/databases/$(database)/documents/households/$(id)).data;
+    }
+
+    function isMember(id) {
+      return isSignedIn()
+        && hhExists(id)
+        && request.auth.uid in hh(id).memberIds;
+    }
+
+    // '' for a non-member, so every role comparison below fails closed.
+    function roleIn(id) {
+      return hhExists(id)
+        ? hh(id).memberRoles.get(request.auth.uid, '')
+        : '';
+    }
+
+    // owner is a parent with extras; no caller distinguishes the two.
+    function isParent(id) {
+      return isMember(id) && roleIn(id) in ['owner', 'parent'];
+    }
+
+    function isOwner(id) {
+      return isMember(id) && roleIn(id) == 'owner';
+    }
+
+    // Access-list: any signed-in user reads it so the app can tell an
+    // un-invited visitor why it is empty. Only allowed users mutate it, which
+    // is how an invite grows the list.
+    match /config/access {
+      allow read: if isSignedIn();
+      allow write: if isAllowedEmail();
+    }
+
+    // Reverse index of which household granted which email. Lets removal
+    // revoke an allowlist entry only when no other household still needs it.
+    match /config/accessGrants {
+      allow read: if isSignedIn();
+      allow write: if isAllowedEmail();
+    }
+
+    // Any signed-in user may resolve a uid to a name/email so member lists
+    // render. Only the owner of the document writes to it.
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    // Membership fields a parent may rewrite (invite, re-role, remove).
+    function membershipKeysOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['memberIds', 'memberRoles', 'memberInfo',
+                  'invitedEmails', 'pendingRoles', 'updatedAt']);
+    }
+
+    // Role the inviter recorded, keyed by encodeEmailKey(email). Defaults to
+    // 'child' so a claim can never invent a privileged role.
+    function pendingRoleForSelf() {
+      return resource.data.get('pendingRoles', {})
+        .get(userEmail().replace('[.]', '%2E'), 'child');
+    }
+
+    // The one write a non-member may make: an invited email turning itself
+    // into a member. It may add only its own uid, only with the recorded
+    // role, and must drop its own invite in the same write.
+    function isClaiming() {
+      return isSignedIn()
+        && userEmail() in resource.data.get('invitedEmails', [])
+        && membershipKeysOnly()
+        && request.resource.data.memberIds.toSet()
+            == resource.data.memberIds.toSet().union([request.auth.uid].toSet())
+        && request.resource.data.memberRoles.diff(resource.data.memberRoles)
+            .affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.memberInfo.diff(resource.data.memberInfo)
+            .affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.memberRoles[request.auth.uid] == pendingRoleForSelf()
+        && !(userEmail() in request.resource.data.get('invitedEmails', []));
+    }
+
+    // Members keep their own avatar/name current without asking a parent.
+    function isSelfInfoUpdate(id) {
+      return isMember(id)
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['memberInfo', 'updatedAt'])
+        && request.resource.data.memberInfo.diff(resource.data.memberInfo)
+            .affectedKeys().hasOnly([request.auth.uid]);
+    }
+
+    match /households/{householdId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid in resource.data.memberIds
+            || userEmail() in resource.data.get('invitedEmails', []));
+      allow create: if isAllowedEmail()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.auth.uid in request.resource.data.memberIds
+        && request.resource.data.memberRoles[request.auth.uid] == 'owner';
+      allow update: if isOwner(householdId)
+        || isClaiming()
+        || (isParent(householdId) && membershipKeysOnly())
+        || isSelfInfoUpdate(householdId);
+      allow delete: if isOwner(householdId);
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isMember(resource.data.householdId);
+      allow create: if isParent(request.resource.data.householdId);
+      allow update: if isParent(resource.data.householdId)
+        && request.resource.data.householdId == resource.data.householdId;
+      allow delete: if isParent(resource.data.householdId);
+    }
+
+    // A parent decides a completion that is still waiting: pending ->
+    // approved or pending -> rejected. The subject and the coin snapshot are
+    // frozen so an approval cannot quietly become a bigger payout for someone
+    // else, and an already-approved entry is out of reach here because
+    // reversing paid coins is undoEntry's job (delete the entry, append the
+    // compensating 'adjust' row) — anything else leaves the entry and the
+    // balance disagreeing.
+    function isDecision() {
+      return isParent(resource.data.householdId)
+        && resource.data.status == 'pending'
+        && request.resource.data.householdId == resource.data.householdId
+        && request.resource.data.memberId == resource.data.memberId
+        && request.resource.data.taskId == resource.data.taskId
+        && request.resource.data.dateKey == resource.data.dateKey
+        && request.resource.data.coin == resource.data.coin
+        && request.resource.data.status in ['approved', 'rejected'];
+    }
+
+    // Comment counters are denormalised onto the entry, and anyone in the
+    // family may comment on anyone's entry — so any member may bump these two
+    // fields, and nothing else, on any entry of their household.
+    function isCommentCounterUpdate() {
+      return isMember(resource.data.householdId)
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['commentCount', 'lastCommentAt']);
+    }
+
+    // A rejected chore can be done again. completeTask writes the same
+    // deterministic id, so the retry lands as an update, and only a rejected
+    // entry may be reopened: that is what stops a second tap on a live entry
+    // from letting its batch append a second ledger row.
+    function isRedo() {
+      return isMember(resource.data.householdId)
+        && resource.data.status == 'rejected'
+        && (resource.data.memberId == request.auth.uid
+            || isParent(resource.data.householdId))
+        && request.resource.data.householdId == resource.data.householdId
+        && request.resource.data.memberId == resource.data.memberId
+        && request.resource.data.taskId == resource.data.taskId
+        && request.resource.data.dateKey == resource.data.dateKey
+        && request.resource.data.status in ['pending', 'approved']
+        && (!request.resource.data.keys().hasAny(['decidedBy', 'decidedAt'])
+            || isParent(resource.data.householdId));
+    }
+
+    match /entries/{entryId} {
+      allow read: if isMember(resource.data.householdId);
+      // You may complete your own task, and a parent may tick one off for a
+      // child too young to hold the phone. Only as pending (waiting for a
+      // parent) or approved (a task that needs no approval); recording a
+      // decision at creation time is a parent's privilege.
+      allow create: if isMember(request.resource.data.householdId)
+        && (request.resource.data.memberId == request.auth.uid
+            || isParent(request.resource.data.householdId))
+        && request.resource.data.status in ['pending', 'approved']
+        && (!request.resource.data.keys().hasAny(['decidedBy', 'decidedAt'])
+            || isParent(request.resource.data.householdId));
+      allow update: if isDecision() || isRedo() || isCommentCounterUpdate();
+      // Undo removes your own entry. The owner also deletes entries while
+      // cascading a household deletion.
+      allow delete: if isMember(resource.data.householdId)
+        && (resource.data.memberId == request.auth.uid
+            || isOwner(resource.data.householdId));
+    }
+
+    match /comments/{commentId} {
+      allow read: if isMember(resource.data.householdId);
+      allow create: if isMember(request.resource.data.householdId)
+        && request.resource.data.authorId == request.auth.uid;
+      // Soft delete only: the author or a parent may hide a comment, nobody
+      // may rewrite its text.
+      allow update: if (request.auth.uid == resource.data.authorId
+                        || isParent(resource.data.householdId))
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['deletedAt'])
+        && request.resource.data.deletedAt != null;
+      // Hard delete only as part of the owner's household cascade.
+      allow delete: if isOwner(resource.data.householdId);
+    }
+
+    // The ledger is the single source of truth for coins, so it is
+    // append-only. Who may append what:
+    //   parent  — anything (approval, bonus, adjustment, payout)
+    //   member  — a positive 'task' row for themselves (a task that needs no
+    //             approval) and a negative 'adjust' row for themselves (undo)
+    // A member can therefore never move coins upward outside a task.
+    function isLedgerAppend() {
+      return isMember(request.resource.data.householdId)
+        && request.resource.data.actorId == request.auth.uid
+        && (isParent(request.resource.data.householdId)
+            || (request.resource.data.memberId == request.auth.uid
+                && ((request.resource.data.reason == 'task'
+                     && request.resource.data.delta > 0)
+                    || (request.resource.data.reason == 'adjust'
+                        && request.resource.data.delta < 0))));
+    }
+
+    match /ledger/{ledgerId} {
+      allow read: if isMember(resource.data.householdId);
+      allow create: if isLedgerAppend();
+      allow update: if false;
+      // Only the owner's household cascade erases history.
+      allow delete: if isOwner(resource.data.householdId);
+    }
+
+    // Cache of the ledger sum, written in the same batch as the ledger row.
+    // Any member may write it because any member may append a ledger row;
+    // it is rebuildable via scripts/recalc-balances.ts if it ever drifts.
+    match /balances/{balanceId} {
+      allow read: if isMember(resource.data.householdId);
+      allow create: if isMember(request.resource.data.householdId);
+      allow update: if isMember(resource.data.householdId)
+        && request.resource.data.householdId == resource.data.householdId
+        && request.resource.data.memberId == resource.data.memberId;
+      allow delete: if isOwner(resource.data.householdId);
+    }
+
+    match /payouts/{payoutId} {
+      allow read: if isMember(resource.data.householdId);
+      // Anyone may ask to exchange their own coins; nobody may file a request
+      // that is already decided.
+      allow create: if isMember(request.resource.data.householdId)
+        && request.resource.data.memberId == request.auth.uid
+        && request.resource.data.status == 'requested';
+      allow update: if isParent(resource.data.householdId)
+        && request.resource.data.householdId == resource.data.householdId
+        && request.resource.data.memberId == resource.data.memberId
+        && request.resource.data.coins == resource.data.coins;
+      allow delete: if isParent(resource.data.householdId);
+    }
+  }
+}

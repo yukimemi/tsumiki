@@ -1,0 +1,66 @@
+rules_version = '2';
+
+// tsumiki storage rules.
+//
+// Uploads live under households/{householdId}/, and membership only exists in
+// Firestore, so these rules reach across services with firestore.get().
+//
+// One-time IAM grant required per project — without it every cross-service
+// call returns null and uploads silently 403. The console grants it when you
+// press Publish; the REST API (scripts/deploy-rules.ts, CI) does not:
+//
+//   gcloud projects add-iam-policy-binding <PROJECT_ID> \
+//     --member="serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-firebasestorage.iam.gserviceaccount.com" \
+//     --role="roles/firebaserules.firestoreServiceAgent"
+//
+// IAM changes do not apply to the live ruleset retroactively: re-run
+// `pnpm rules:deploy` afterwards to cut a fresh release.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null
+        && request.auth.token.email_verified == true;
+    }
+
+    function accessConfig() {
+      return firestore.get(/databases/(default)/documents/config/access).data;
+    }
+
+    // Same global gate as Firestore: the project is private. Stored emails are
+    // lowercased by the client, so compare against a lowercased claim.
+    function isAllowedEmail() {
+      return isSignedIn()
+        && (request.auth.token.email.lower() in accessConfig().get('allowedEmails', [])
+            || request.auth.token.email.lower() in accessConfig().get('adminEmails', []));
+    }
+
+    function household(householdId) {
+      return firestore.get(/databases/(default)/documents/households/$(householdId)).data;
+    }
+
+    function isMember(householdId) {
+      return isSignedIn()
+        && request.auth.uid in household(householdId).memberIds;
+    }
+
+    function isParent(householdId) {
+      return isMember(householdId)
+        && household(householdId).memberRoles.get(request.auth.uid, '')
+            in ['owner', 'parent'];
+    }
+
+    match /households/{householdId}/{allPaths=**} {
+      allow read: if isMember(householdId);
+      // Only parents upload, only images, only small ones: this bucket holds
+      // avatars and proof-of-task photos, nothing else.
+      allow create, update: if isAllowedEmail()
+        && isParent(householdId)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      // Split out because `request.resource` is null on delete.
+      allow delete: if isAllowedEmail() && isParent(householdId);
+    }
+  }
+}

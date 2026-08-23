@@ -1,0 +1,147 @@
+preset = "github.com/yukimemi/pj-presets:web-react-firebase"
+applied_at = "2026-08-23T02:34:39.4176105Z"
+
+[[templates]]
+source = "github.com/yukimemi/pj-base"
+rev = "62de494e1dc6fa312924f2d9dee80b22fcf8d2ab"
+version = "0.15.0"
+
+[[templates]]
+source = "github.com/yukimemi/pj-pnpm"
+rev = "73b6cb62279636896781f781a91aeccb576f10fb"
+version = "0.1.0"
+
+[[templates]]
+source = "github.com/yukimemi/pj-react-web"
+rev = "779044a9ecc55ef0d24800ed23ff8c3c2f7140b8"
+version = "0.2.0"
+
+[[templates]]
+source = "github.com/yukimemi/pj-firebase"
+rev = "6bc26276dd9b0b95cc94edbe37a3379b24834bbe"
+version = "0.4.0"
+
+[vars]
+project = "tsumiki"
+
+[files.".agents/skills/renri/SKILL.md"]
+once_applied = true
+
+[files.".claude/skills/renri/SKILL.md"]
+once_applied = true
+
+[files.".env.example"]
+once_applied = true
+
+[files.".gemini/settings.json"]
+content_hash = "486c974de88903113ed99b4e643432b7050e88f1031276f5263e8da7b43fe11e"
+
+[files.".gitattributes"]
+content_hash = "6d380d1ecc2f882c2011429d548a6f3c774b74f0c757d884453e4667172acc2a"
+
+[files.".github/workflows/apm-bump.yml"]
+content_hash = "f1cf3615e0f5ff443860722da8d7f74530eaa37e755e65f4392a0c25cd83917e"
+
+[files.".github/workflows/claude-review.yml"]
+content_hash = "b6b6c2bfe826aeb9a07023d216f5b9055e92429f1a95f729391aca0c9d107bde"
+
+[files.".github/workflows/claude.yml"]
+content_hash = "432ce337cc27a74e6bc05f87aa5163296799b06f31d4759dc800c619254a3317"
+
+[files.".github/workflows/deploy.yml"]
+once_applied = true
+
+[files.".github/workflows/kata-apply.yml"]
+content_hash = "f58d2d3286699276c635bf45e3fc6dca9226cba1eb3461758d7f805682cce101"
+
+[files.".gitignore"]
+content_hash = "99ce77ba843c5bee84182b768f18a501f6e76eef3731eb0e899997b33b7c8468"
+
+[files.".kata/vars.toml"]
+content_hash = "8e573305bc9b45b40e4c4c24c0da7728771a12d81c4c1631d6e35f25a189cf84"
+once_applied = true
+
+[files."AGENTS.md"]
+content_hash = "9d7024253950d2939b4cd39c9b3738c7eaf67c93c520b0763c854ed05769cc7c"
+
+[files."CLAUDE.md"]
+content_hash = "a76b3af252969b8120128d7ce44f2b6cfdcf88c7420ee00675732f542d047529"
+
+[files."GEMINI.md"]
+content_hash = "3670f70a2f0be4013926bab6e878b90a42ad64c17899080aef4d193b246fa390"
+
+[files.LICENSE]
+once_applied = true
+
+[files."OPENCODE.md"]
+content_hash = "11993dc7feec5fca8e83934f135de33879b88f100c48aeba0729de2f57a11a48"
+
+[files."apm.lock.yaml"]
+once_applied = true
+
+[files."apm.yml"]
+once_applied = true
+
+[files."eslint.config.js"]
+once_applied = true
+
+[files."firebase.json"]
+once_applied = true
+
+[files."firestore.rules"]
+once_applied = true
+
+[files."index.html"]
+once_applied = true
+
+[files."opencode.json"]
+content_hash = "2ada1cf4347db9e98fadd67ca72cd9e29042c5bf6ab719d666b5d71f97663e81"
+
+[files."package.json"]
+once_applied = true
+
+[files."postcss.config.js"]
+content_hash = "e32657baf631d7c5f4dc67b4b2ee0ec8e7d5b3c41860e09cddce7c0377cd80bc"
+
+[files."public/favicon.svg"]
+once_applied = true
+
+[files."renovate.json"]
+content_hash = "92cab89eb3e974d0deba3872bd58be52d65b74e30883b55113781b5d84083484"
+once_applied = true
+
+[files."renri.toml"]
+content_hash = "e24eaf714b320525e82754e8e72dbdc34a21435987d3728a51c840fdd0759e85"
+
+[files."src/App.tsx"]
+once_applied = true
+
+[files."src/index.css"]
+once_applied = true
+
+[files."src/main.tsx"]
+once_applied = true
+
+[files."src/vite-env.d.ts"]
+once_applied = true
+
+[files."storage.rules"]
+once_applied = true
+
+[files."tailwind.config.js"]
+once_applied = true
+
+[files."tsconfig.app.json"]
+once_applied = true
+
+[files."tsconfig.json"]
+content_hash = "770b4140bbb581e2dfd9ea9946ffc9c75a1d86ba7d2db5f77c83e37cbdf9d808"
+
+[files."tsconfig.node.json"]
+once_applied = true
+
+[files."vercel.json"]
+content_hash = "5e25595a19964aa0fa0a2ea5bb5bb1a0525557d9a41449ec10dec46f22df820f"
+
+[files."vite.config.ts"]
+once_applied = true

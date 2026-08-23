@@ -1,0 +1,610 @@
+/*
+ * tsumiki — warm wood over paper.
+ *
+ * Colour lives in slots, and a slot's *meaning* is the rule: --coin is
+ * coins, --done is a finished job, --wait is something a parent has not
+ * looked at yet, --late is past its time, --self is you. Swap a value and
+ * the whole app follows. Write a literal anywhere below the palette
+ * blocks and it stops following — the glow would keep the old hue while
+ * the thing glowing changed colour, which is the one bug a screenshot of
+ * the default theme can never show. So only two spellings are allowed
+ * outside the palette blocks:
+ *
+ *     rgb(from var(--coin) r g b / 0.18)
+ *     color-mix(in srgb, var(--coin) 14%, var(--paper))
+ *
+ * — one slot at some alpha, one slot lifted into another.
+ *
+ * Two levers sit beside the palette, and they are deliberately not the
+ * same lever. --glow multiplies every shadow and halo, so the light
+ * theme switches the lot off with a zero instead of a parallel
+ * stylesheet. --fx multiplies every celebration's amplitude and is the
+ * single kill switch the effects code reads; the motion axis and
+ * prefers-reduced-motion both drive it to 0.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * hiru — bright daylight, and the default.
+ *
+ * Also what an unset data-theme gets, so the very first paint (before
+ * bootTheme has run, or if localStorage is unreadable) is already a
+ * finished theme rather than unstyled slots.
+ */
+:root,
+:root[data-theme="hiru"] {
+  --paper: #fffaf0;
+  --panel: #ffffff;
+  --sunk: #f5ece0;
+  --ink: #3b2f24;
+  --muted: #8a7a68;
+  --rule: #e8dcc9;
+  --rule-strong: #d2c0a6;
+
+  --coin: #f7b32b;
+  --done: #3f9e5a;
+  --wait: #8563d2;
+  --late: #e2553d;
+  --self: #1c9a9a;
+
+  /*
+   * Ink drawn on top of a --coin fill. Not a duplicate of --ink: gold is
+   * light in both themes, so a filled coin button needs dark text under
+   * daylight *and* at night, while --ink flips. One slot, one meaning.
+   */
+  --on-coin: #3b2f24;
+
+  --m-sakura: #ef7a9f;
+  --m-sora: #3f97dd;
+  --m-wakaba: #4faa5a;
+  --m-yamabuki: #dd9a2a;
+  --m-fuji: #8272d4;
+  --m-kohaku: #c9743d;
+
+  /* Every shadow is written calc(Npx * var(--glow)); daylight has none. */
+  --glow: 0;
+  /* Celebration amplitude. 1 = as designed, 0 = nothing moves. */
+  --fx: 1;
+
+  --radius: 16px;
+  /* Nothing tappable is allowed to be smaller than this. */
+  --tap: 44px;
+  --nav-h: 60px;
+
+  color-scheme: light;
+}
+
+/*
+ * yoru — the same room at night. matsuri shares the palette and only
+ * turns the two levers up, so there is exactly one dark colour block to
+ * keep honest.
+ */
+:root[data-theme="yoru"],
+:root[data-theme="matsuri"] {
+  --paper: #1a1410;
+  --panel: #251d16;
+  --sunk: #14100c;
+  --ink: #f3e8d9;
+  --muted: #a89684;
+  --rule: #372a20;
+  --rule-strong: #50402f;
+
+  --coin: #ffc94a;
+  --done: #57c97a;
+  --wait: #ab86f0;
+  --late: #ff7a5c;
+  --self: #35d0c8;
+  --on-coin: #17110c;
+
+  --m-sakura: #ff96b4;
+  --m-sora: #6fb8f5;
+  --m-wakaba: #7bd67b;
+  --m-yamabuki: #ffc061;
+  --m-fuji: #a897ff;
+  --m-kohaku: #e79a63;
+
+  --glow: 1;
+
+  color-scheme: dark;
+}
+
+/* matsuri — night with the lights up. Values only; no new slots. */
+:root[data-theme="matsuri"] {
+  --glow: 1.4;
+  --fx: 2;
+}
+
+/*
+ * The motion axis, orthogonal to colour. Placed after every theme block
+ * so it outranks matsuri's --fx: 2 on source order at equal specificity.
+ */
+:root[data-motion="calm"] {
+  --fx: 0;
+}
+
+/* ---- foundations -------------------------------------------------- */
+
+html,
+body,
+#root {
+  height: 100dvh;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* A tap on a row should not paint a grey box over the celebration. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+::selection {
+  background: rgb(from var(--self) r g b / 0.25);
+}
+
+:focus-visible {
+  outline: 2px solid var(--self);
+  outline-offset: 2px;
+}
+
+@layer components {
+  /* Safe-area helpers. Spelled once so no component has to remember the
+     env() name, and so a notch is padding rather than a magic number. */
+  .safe-t {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-b {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Scroll clearance for the bottom nav: its height, the inset it sits
+     on, and a thumb's worth of slack. */
+  .pad-nav {
+    padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px);
+  }
+
+  /*
+   * 16px is not a taste decision: iOS Safari zooms the viewport when a
+   * focused field's text is smaller than that, and on a form-heavy phone
+   * app the zoom never quite comes back. Only relax it once there is a
+   * pointer worth the name.
+   */
+  .input {
+    width: 100%;
+    min-height: var(--tap);
+    padding: 0.625rem 0.75rem;
+    font-size: 16px;
+    line-height: 1.4;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: calc(var(--radius) - 4px);
+    box-shadow: inset 0 1px 2px rgb(from var(--ink) r g b / 0.04);
+    appearance: none;
+  }
+
+  .input::placeholder {
+    color: rgb(from var(--muted) r g b / 0.75);
+  }
+
+  .input:focus {
+    outline: none;
+    border-color: var(--self);
+    box-shadow:
+      0 0 0 3px rgb(from var(--self) r g b / 0.2),
+      0 0 calc(10px * var(--glow)) rgb(from var(--self) r g b / 0.5);
+  }
+
+  .input:disabled {
+    background: var(--sunk);
+    color: var(--muted);
+  }
+
+  @media (min-width: 640px) {
+    .input {
+      font-size: 0.9375rem;
+    }
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    box-shadow:
+      0 1px 2px rgb(from var(--ink) r g b / 0.05),
+      0 0 calc(14px * var(--glow)) rgb(from var(--ink) r g b / 0.35);
+  }
+
+  /* One tone slot, set inline to var(--m-<colour>), so the six member
+     hues need six values and not six rules. */
+  .avatar {
+    display: grid;
+    place-items: center;
+    flex: none;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--tone) 22%, var(--panel));
+    border: 1px solid rgb(from var(--tone) r g b / 0.55);
+    box-shadow: 0 0 calc(8px * var(--glow)) rgb(from var(--tone) r g b / 0.55);
+  }
+
+  .sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(from var(--sunk) r g b / 0.55);
+    backdrop-filter: blur(2px);
+  }
+
+  .sheet-panel {
+    background: var(--panel);
+    border-top: 1px solid var(--rule);
+    border-top-left-radius: calc(var(--radius) + 8px);
+    border-top-right-radius: calc(var(--radius) + 8px);
+    box-shadow:
+      0 -8px 32px rgb(from var(--sunk) r g b / 0.35),
+      0 0 calc(24px * var(--glow)) rgb(from var(--self) r g b / 0.2);
+  }
+
+  /* The grab handle at the top of a sheet — affordance only. */
+  .sheet-grip {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--rule-strong);
+  }
+}
+
+/* ---- celebrations -------------------------------------------------- */
+
+/*
+ * The catalog from docs/DESIGN.md §5, one keyframe each. Amplitude is
+ * always multiplied by var(--fx), so calm mode and reduced motion take
+ * the movement to literally zero pixels before the blankets at the
+ * bottom of this file even get involved.
+ *
+ * Two kinds of effect, and the difference matters when the clock stops.
+ * Element-carried effects (stack, pop, quake) animate something that is
+ * on screen for its own reasons and must be left where it is. Overlay
+ * effects (burst, coin, mark, combo) live only inside .tsu-layer, rest at
+ * opacity 0 and draw themselves out of their keyframes — so silencing
+ * them leaves nothing behind. Removal is always a timer in
+ * EffectsProvider, never animationend, so a silenced effect still gets
+ * unmounted.
+ */
+
+.tsu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* stack — a block lands on the row: thrust up, then squash on landing. */
+.tsu-stack {
+  transform-origin: 50% 100%;
+  animation: tsu-stack 320ms cubic-bezier(0.2, 0.85, 0.25, 1);
+}
+
+@keyframes tsu-stack {
+  0% {
+    transform: translateY(0) scaleY(1);
+  }
+  30% {
+    transform: translateY(calc(-9px * var(--fx))) scaleY(1);
+  }
+  62% {
+    transform: translateY(0) scaleY(calc(1 - 0.07 * var(--fx)));
+  }
+  82% {
+    transform: translateY(calc(-2px * var(--fx))) scaleY(calc(1 + 0.02 * var(--fx)));
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/*
+ * coinfly — --x/--y is where the coin left from, --dx/--dy how far it has
+ * to go, --d its place in the stagger. All five come from the layer.
+ * The arc is the lift at 70%, not a motion path, so it survives a
+ * viewport of any shape.
+ */
+.tsu-coin {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  opacity: 0;
+  font-size: 20px;
+  line-height: 1;
+  filter: drop-shadow(0 0 calc(8px * var(--glow)) rgb(from var(--coin) r g b / 0.8));
+  animation: tsu-coinfly 700ms cubic-bezier(0.35, 0, 0.25, 1) var(--d, 0ms) both;
+}
+
+@keyframes tsu-coinfly {
+  0% {
+    transform: translate(-50%, -50%) scale(0.7);
+    opacity: 0;
+  }
+  12% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 1;
+  }
+  70% {
+    transform: translate(
+        calc(-50% + var(--dx) * 0.72),
+        calc(-50% + var(--dy) * 0.5 - 26px * var(--fx))
+      )
+      scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.35);
+    opacity: 0;
+  }
+}
+
+/* The figure that rides with the coins, so a +12 is not eight glyphs and
+   a guess. Same flight, no arc. */
+.tsu-coin-label {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  opacity: 0;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--coin);
+  text-shadow: 0 0 calc(10px * var(--glow)) rgb(from var(--coin) r g b / 0.9);
+  animation: tsu-coinfly 700ms cubic-bezier(0.35, 0, 0.25, 1) both;
+}
+
+/*
+ * burst — matsuri only, and gated by the theme rather than by a flag in
+ * JavaScript, so there is no combination of settings that puts a
+ * full-screen shockwave over the daylight palette.
+ */
+.tsu-burst {
+  position: absolute;
+  inset: -20%;
+  opacity: 0;
+  background:
+    radial-gradient(
+      circle at 50% 46%,
+      transparent 0 32%,
+      rgb(from var(--coin) r g b / 0.32) 35% 41%,
+      transparent 46%
+    ),
+    radial-gradient(circle at 50% 46%, rgb(from var(--coin) r g b / 0.18), transparent 58%);
+}
+
+:root[data-theme="matsuri"] .tsu-burst {
+  animation: tsu-burst 420ms ease-out both;
+}
+
+@keyframes tsu-burst {
+  0% {
+    opacity: 1;
+    transform: scale(0.45);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.55);
+  }
+}
+
+/*
+ * quake — spelled twice on purpose. The provider alternates the two
+ * class names, so a second undo inside 240ms is a new class and the
+ * animation restarts instead of being ignored.
+ */
+.tsu-quake-a {
+  animation: tsu-quake-a 240ms ease-out;
+}
+
+.tsu-quake-b {
+  animation: tsu-quake-b 240ms ease-out;
+}
+
+@keyframes tsu-quake-a {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  20% {
+    transform: translate3d(calc(-5px * var(--fx)), calc(3px * var(--fx)), 0);
+  }
+  40% {
+    transform: translate3d(calc(5px * var(--fx)), calc(-3px * var(--fx)), 0);
+  }
+  60% {
+    transform: translate3d(calc(-3px * var(--fx)), calc(-2px * var(--fx)), 0);
+  }
+  80% {
+    transform: translate3d(calc(3px * var(--fx)), calc(2px * var(--fx)), 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes tsu-quake-b {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  20% {
+    transform: translate3d(calc(-5px * var(--fx)), calc(3px * var(--fx)), 0);
+  }
+  40% {
+    transform: translate3d(calc(5px * var(--fx)), calc(-3px * var(--fx)), 0);
+  }
+  60% {
+    transform: translate3d(calc(-3px * var(--fx)), calc(-2px * var(--fx)), 0);
+  }
+  80% {
+    transform: translate3d(calc(3px * var(--fx)), calc(2px * var(--fx)), 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/*
+ * pop — one keyframe, two homes. The approval badge wears .tsu-pop and
+ * is already visible, so the fill ending at opacity 1 leaves it exactly
+ * as it was. The overlay tick wears .tsu-mark, rests at 0 and is taken
+ * off by the provider's timer.
+ */
+.tsu-pop {
+  animation: tsu-pop 260ms cubic-bezier(0.3, 1.4, 0.4, 1) both;
+}
+
+.tsu-mark {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  margin: -14px 0 0 -14px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  font-size: 15px;
+  color: var(--paper);
+  background: var(--done);
+  opacity: 0;
+  box-shadow: 0 0 calc(14px * var(--glow)) rgb(from var(--done) r g b / 0.8);
+  animation: tsu-pop 260ms cubic-bezier(0.3, 1.4, 0.4, 1) both;
+}
+
+@keyframes tsu-pop {
+  0% {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(calc(1 + 0.3 * var(--fx)));
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* combo — the count of completions inside COMBO_WINDOW_MS, big. */
+.tsu-combo {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  opacity: 0;
+  font-size: clamp(2.5rem, 16vw, 5rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  color: var(--coin);
+  text-shadow:
+    0 2px 0 rgb(from var(--ink) r g b / 0.18),
+    0 0 calc(28px * var(--glow)) rgb(from var(--coin) r g b / 0.85);
+  animation: tsu-combo 620ms cubic-bezier(0.2, 1.3, 0.3, 1) both;
+}
+
+.tsu-combo small {
+  display: block;
+  font-size: 0.26em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  text-shadow: none;
+}
+
+@keyframes tsu-combo {
+  0% {
+    transform: translate(-50%, 0) scale(calc(0.6 + 0.2 * var(--fx)));
+    opacity: 0;
+  }
+  22% {
+    transform: translate(-50%, calc(-6px * var(--fx))) scale(calc(1 + 0.14 * var(--fx)));
+    opacity: 1;
+  }
+  70% {
+    transform: translate(-50%, calc(-12px * var(--fx))) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, calc(-20px * var(--fx))) scale(1);
+    opacity: 0;
+  }
+}
+
+/*
+ * Calm: the celebrations off, the app unchanged. Element-carried effects
+ * only lose their animation — the row has to stay where it is. Overlay
+ * effects are also pinned back to opacity 0, because with the clock
+ * stopped nothing would draw them off the screen again.
+ */
+:root[data-motion="calm"] .tsu-stack,
+:root[data-motion="calm"] .tsu-pop,
+:root[data-motion="calm"].tsu-quake-a,
+:root[data-motion="calm"].tsu-quake-b {
+  animation: none !important;
+}
+
+:root[data-motion="calm"] .tsu-burst,
+:root[data-motion="calm"] .tsu-coin,
+:root[data-motion="calm"] .tsu-coin-label,
+:root[data-motion="calm"] .tsu-mark,
+:root[data-motion="calm"] .tsu-combo {
+  animation: none !important;
+  opacity: 0 !important;
+}
+
+/*
+ * The same answer for a reader who asked the operating system instead of
+ * this app's settings, plus the two pieces of ordinary UI motion. --fx
+ * is forced here as well as being blanketed, so anything reading it in
+ * JavaScript declines before it renders a node at all.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  :root[data-theme] {
+    --fx: 0;
+  }
+
+  .tsu-stack,
+  .tsu-pop,
+  .tsu-quake-a,
+  .tsu-quake-b,
+  .animate-fade-in-up,
+  .animate-sheet-slide-up {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .tsu-burst,
+  .tsu-coin,
+  .tsu-coin-label,
+  .tsu-mark,
+  .tsu-combo {
+    animation: none !important;
+    transition: none !important;
+    opacity: 0 !important;
+  }
+}

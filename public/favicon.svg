@@ -1,0 +1,83 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 64 64"
+  width="64"
+  height="64"
+  role="img"
+  aria-labelledby="tsumiki-title"
+>
+  <title id="tsumiki-title">tsumiki</title>
+  <!--
+    Three blocks, widest at the bottom, in the app's own three accents:
+    teal (the self slot), green (done), gold (coin). The hues are literal
+    because an SVG served as an icon cannot see the page's custom
+    properties: if the palette moves, this file moves with it.
+
+    Everything sits inside the circle of radius 25.6 around (32,32), which
+    is the 80% safe zone a maskable icon gets cropped to. The background is
+    transparent so the launcher's own plate shows through.
+  -->
+  <g>
+    <rect x="13.5" y="36" width="37" height="12" rx="3" fill="#1c9a9a" />
+    <rect
+      x="13.5"
+      y="36"
+      width="37"
+      height="4.5"
+      rx="2.5"
+      fill="#ffffff"
+      fill-opacity="0.22"
+    />
+    <rect
+      x="13.5"
+      y="45"
+      width="37"
+      height="3"
+      rx="1.5"
+      fill="#000000"
+      fill-opacity="0.12"
+    />
+  </g>
+  <g>
+    <rect x="17" y="24" width="30" height="12" rx="3" fill="#3f9e5a" />
+    <rect
+      x="17"
+      y="24"
+      width="30"
+      height="4.5"
+      rx="2.5"
+      fill="#ffffff"
+      fill-opacity="0.22"
+    />
+    <rect
+      x="17"
+      y="33"
+      width="30"
+      height="3"
+      rx="1.5"
+      fill="#000000"
+      fill-opacity="0.12"
+    />
+  </g>
+  <g>
+    <rect x="21" y="12" width="22" height="12" rx="3" fill="#f7b32b" />
+    <rect
+      x="21"
+      y="12"
+      width="22"
+      height="4.5"
+      rx="2.5"
+      fill="#ffffff"
+      fill-opacity="0.24"
+    />
+    <rect
+      x="21"
+      y="21"
+      width="22"
+      height="3"
+      rx="1.5"
+      fill="#000000"
+      fill-opacity="0.12"
+    />
+  </g>
+</svg>
