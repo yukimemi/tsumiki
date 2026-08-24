@@ -2,6 +2,7 @@ import { useState } from "react";
 import { addMonths } from "date-fns";
 
 import { useUid } from "../auth/context";
+import { CoinRanking } from "../components/CoinRanking";
 import { CommentThread } from "../components/CommentThread";
 import { EntryCard } from "../components/EntryCard";
 import { MonthCalendar } from "../components/MonthCalendar";
@@ -16,6 +17,7 @@ import {
   Skeleton,
   Textarea,
 } from "../components/ui";
+import { useBalances } from "../data/coins";
 import { approveEntry, rejectEntry, useEntriesInRange } from "../data/entries";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
@@ -32,15 +34,12 @@ import {
 } from "../lib/date";
 import { streakFor } from "../lib/streak";
 import type { Entry } from "../types";
-import {
-  approvedDateKeys,
-  dayCellsFor,
-  totalsByMember,
-  weeklySeries,
-} from "./records";
+import { earnedTotals, periodTotals, rankByCoins } from "./ranking";
+import type { RankPeriod } from "./ranking";
+import { approvedDateKeys, dayCellsFor, weeklySeries } from "./records";
 
-/** How far back the streak subscription reaches. See the comment at the hook. */
-const STREAK_WINDOW_DAYS = 90;
+/** How far back the history subscription reaches. See the comment at the hook. */
+const HISTORY_WINDOW_DAYS = 90;
 
 export function RecordsScreen(): JSX.Element {
   const uid = useUid();
@@ -51,6 +50,7 @@ export function RecordsScreen(): JSX.Element {
   const [monthKey, setMonthKey] = useState(() => monthKeyOf(today));
   const [selectedKey, setSelectedKey] = useState<string | null>(today);
   const [filterMemberId, setFilterMemberId] = useState<string | null>(null);
+  const [rankPeriod, setRankPeriod] = useState<RankPeriod>("week");
   const [commentsEntry, setCommentsEntry] = useState<Entry | null>(null);
   const [rejectingEntry, setRejectingEntry] = useState<Entry | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -61,13 +61,20 @@ export function RecordsScreen(): JSX.Element {
   const grid = monthGridFor(monthKey);
   const monthEntries = useEntriesInRange(householdId, grid[0][0], grid[5][6]);
 
-  // The streak needs history the visible month cannot see: a run that started
-  // in June is still alive in August. This second subscription covers the last
-  // STREAK_WINDOW_DAYS days ending today and feeds ONLY the streak cards; the
-  // calendar and the totals stay on the visible month's window. A streak older
-  // than the window reads as broken — a documented, deliberate boundary.
-  const streakFrom = addDaysKey(today, -(STREAK_WINDOW_DAYS - 1));
-  const streakEntries = useEntriesInRange(householdId, streakFrom, today);
+  // Both the streak and the ranking need history the visible month cannot see:
+  // a run that started in June is still alive in August, and "this week" spans
+  // two months five times a year. This second subscription covers the last
+  // HISTORY_WINDOW_DAYS days ending today and feeds ONLY those two cards; the
+  // calendar and the day list stay on the visible month's window. The window is
+  // far wider than the widest thing read from it (a calendar month), and a
+  // streak older than it reads as broken — a documented, deliberate boundary.
+  const historyFrom = addDaysKey(today, -(HISTORY_WINDOW_DAYS - 1));
+  const historyEntries = useEntriesInRange(householdId, historyFrom, today);
+
+  // Lifetime earned coins for the「ずっと」board. Cheap — one small document
+  // per member — so it is not worth flashing a skeleton on every period switch
+  // to avoid it.
+  const balances = useBalances(householdId);
 
   const memberFilter = filterMemberId;
   const memberVisible = (entry: Entry): boolean =>
@@ -83,11 +90,6 @@ export function RecordsScreen(): JSX.Element {
     (entry) => entry.dateKey === selectedKey && memberVisible(entry),
   );
 
-  const monthOnly = monthEntries.data.filter(
-    (entry) => monthKeyOf(entry.dateKey) === monthKey,
-  );
-  const totals = totalsByMember(monthOnly.filter(memberVisible));
-
   const series = weeklySeries({
     weekKeys: weekKeys(selectedKey ?? today),
     entries: monthEntries.data,
@@ -98,8 +100,25 @@ export function RecordsScreen(): JSX.Element {
   const memberOf = (memberId: string) =>
     members.find((member) => member.uid === memberId) ?? null;
 
-  const nameOf = (memberId: string): string =>
-    memberOf(memberId)?.info.displayName ?? "だれか";
+  // The board is anchored on today, never on the month the calendar happens to
+  // be showing: 「こんしゅう」 has to mean this week even while browsing March.
+  // It ignores the member filter above for the same reason — a ranking of one
+  // person is not a ranking.
+  const thisWeek = weekKeys(today);
+  const thisMonth = monthKeyOf(today);
+  const memberIds = members.map((member) => member.uid);
+  const rankRows = rankByCoins(
+    rankPeriod === "all"
+      ? earnedTotals(balances.data, memberIds)
+      : periodTotals({
+          entries: historyEntries.data,
+          memberIds,
+          fromKey: rankPeriod === "week" ? thisWeek[0] : `${thisMonth}-01`,
+          // Date keys sort as dates, so a bound past the end of the month
+          // covers February and August alike.
+          toKey: rankPeriod === "week" ? thisWeek[6] : `${thisMonth}-31`,
+        }),
+  );
 
   const fail = (error: unknown): never => {
     setErrorMessage(
@@ -228,7 +247,7 @@ export function RecordsScreen(): JSX.Element {
         <ul className="mt-2 space-y-3">
           {members.map((member) => {
             const stat = streakFor(
-              approvedDateKeys(streakEntries.data, member.uid),
+              approvedDateKeys(historyEntries.data, member.uid),
               today,
             );
             return (
@@ -248,6 +267,15 @@ export function RecordsScreen(): JSX.Element {
           })}
         </ul>
       </Card>
+
+      <CoinRanking
+        rows={rankRows}
+        members={members}
+        currentUid={uid}
+        period={rankPeriod}
+        onPeriod={setRankPeriod}
+        loading={rankPeriod === "all" ? balances.loading : historyEntries.loading}
+      />
 
       <Card>
         <h2 className="text-base font-bold text-ink">このしゅうの できたかず</h2>
@@ -288,27 +316,6 @@ export function RecordsScreen(): JSX.Element {
             );
           })}
         </div>
-      </Card>
-
-      <Card>
-        <h2 className="text-base font-bold text-ink">このつきの あつめたコイン</h2>
-        {totals.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">このつきは まだ ないよ</p>
-        ) : (
-          <ul className="mt-2 space-y-2">
-            {totals.map((row) => (
-              <li key={row.memberId} className="flex items-center gap-3">
-                <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
-                  {nameOf(row.memberId)}
-                </span>
-                <span className="text-sm tabular-nums text-muted">
-                  {row.done}件
-                </span>
-                <Badge tone="coin">{row.coins}コイン</Badge>
-              </li>
-            ))}
-          </ul>
-        )}
       </Card>
 
       <Sheet

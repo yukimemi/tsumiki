@@ -15,12 +15,6 @@ export type DayCell = {
   inMonth: boolean;
 };
 
-export type MemberTotals = {
-  memberId: string;
-  done: number;
-  coins: number;
-};
-
 /** Approved entries for one member, or the whole family when null. */
 function approvedFor(entries: Entry[], memberId: string | null): Entry[] {
   return entries.filter(
@@ -63,22 +57,6 @@ export function dayCellsFor(input: {
       };
     }),
   );
-}
-
-/** One row per member who has at least one approved entry, richest first. */
-export function totalsByMember(entries: Entry[]): MemberTotals[] {
-  const totals = new Map<string, MemberTotals>();
-  for (const entry of approvedFor(entries, null)) {
-    const row = totals.get(entry.memberId) ?? {
-      memberId: entry.memberId,
-      done: 0,
-      coins: 0,
-    };
-    row.done += 1;
-    row.coins += entry.coin;
-    totals.set(entry.memberId, row);
-  }
-  return [...totals.values()].sort((a, b) => b.coins - a.coins);
 }
 
 /** Coins earned by approved entries, for one member or the whole family. */

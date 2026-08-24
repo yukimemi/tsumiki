@@ -6,7 +6,6 @@ import {
   approvedDateKeys,
   coinsInRange,
   dayCellsFor,
-  totalsByMember,
   weeklySeries,
 } from "./records";
 
@@ -97,22 +96,6 @@ describe("dayCellsFor", () => {
     const dayAll = everyone.flat().find((cell) => cell.dateKey === "2026-08-10");
     expect(dayAll?.count).toBe(2);
     expect(dayAll?.coins).toBe(5);
-  });
-});
-
-describe("totalsByMember", () => {
-  it("sums per member, sorts by coins descending, and skips undecided entries", () => {
-    const entries = [
-      entry({ memberId: "a", dateKey: "2026-08-01", coin: 3 }),
-      entry({ memberId: "b", dateKey: "2026-08-01", coin: 10 }),
-      entry({ memberId: "a", dateKey: "2026-08-02", coin: 4 }),
-      entry({ memberId: "b", dateKey: "2026-08-02", coin: 99, status: "pending" }),
-      entry({ memberId: "c", dateKey: "2026-08-02", coin: 7, status: "rejected" }),
-    ];
-    expect(totalsByMember(entries)).toEqual([
-      { memberId: "b", done: 1, coins: 10 },
-      { memberId: "a", done: 2, coins: 7 },
-    ]);
   });
 });
 
