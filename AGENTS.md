@@ -602,6 +602,7 @@ same treatment.
 | `encodeEmailKey` (`.` → `%2E`) | `src/lib/ids.ts` + the `pendingRoleForSelf()` helper in `firestore.rules` |
 | Emails are stored lowercased | `src/data/invites.ts`, `src/components/InviteForm.tsx`, `firestore.rules` (`userEmail()`) |
 | Composite indexes | `firestore.indexes.json` — add one whenever a query gains an `orderBy` beside a `where` |
+| The fixed preview hostname | Firebase authorized domains (console) + the `vercel alias set` line under *Vercel previews and Firebase authorized domains* below |
 
 ### Coins
 
@@ -630,3 +631,60 @@ themselves.
 Anything a user reads is Japanese, written for a family that includes young
 children: short, kind, kana-leaning, no jargon. Code, identifiers, comments,
 commit messages and PR text are English. Comments explain why, not what.
+
+### Vercel previews and Firebase authorized domains
+
+Firebase Auth refuses to sign anyone in from a hostname that is not on the
+project's authorized-domains list, and that list takes exact hostnames — the
+two production aliases are on it as two separate entries, which is what
+proves there is no wildcard or parent-domain matching to lean on. Vercel
+gives every branch its own preview hostname, so previews and that list are
+structurally at odds: a fresh branch is a fresh hostname nobody authorized.
+
+The way out is one hostname that never changes:
+
+```sh
+vercel alias set <deployment-url> tsumiki-preview.vercel.app
+```
+
+`tsumiki-preview.vercel.app` is already on the authorized-domains list.
+Re-point it at whichever deployment you want to test and sign-in works —
+**never add a per-branch preview hostname to Firebase**, or the list grows a
+dead entry per merged branch and every entry is a domain allowed to start an
+auth flow for this project.
+
+Two things that look like this problem and are not:
+
+- **A preview 302s to `vercel.com/sso-api`.** That is Vercel Deployment
+  Protection, which sits in front of the app and has nothing to do with
+  Firebase. A browser signed in to Vercel passes it without noticing; `curl`
+  and a phone that has never seen Vercel do not. Do not diagnose an auth
+  failure from a `curl` that never reached the app.
+- **Proxying `/__/auth/**` to the Firebase auth domain.** That trick is for
+  third-party-cookie breakage in `signInWithRedirect`. It does not lift the
+  authorized-domain requirement, so it is not a substitute for the alias.
+  (The `navigateFallbackDenylist` entry for `/__/auth` in `vite.config.ts`
+  exists so the service worker never answers that path from cache, which is
+  a different concern again.)
+
+### What actually reviews a PR here
+
+The kata block above describes a PR passing under two review bots. Only one
+of them runs:
+
+- **CodeRabbit does not review this repo automatically** — its OSS plan skips
+  repositories under 10 stars. The "🔍 Trigger review" checkbox on its comment
+  is consumed when ticked (the box resets) without producing a review, so
+  treat CodeRabbit the way the rate-limit exception says to: it has posted no
+  findings, there is nothing to address, and it is not a merge blocker.
+- **claude-review needs `CLAUDE_CODE_OAUTH_TOKEN` as a repository secret.**
+  Installing the Claude GitHub App account-wide is a different layer and does
+  not supply it: Actions secrets exist at repo, environment and organization
+  scope only, and `yukimemi` is a personal account, so there is no shared
+  scope to inherit from. Every new repo needs its own `gh secret set`. The
+  token expires, and the job fails in about four seconds when it is missing
+  or dead — a fast red `review` is a credentials problem, not a review that
+  found something.
+
+Which leaves Claude's review plus `ci` as the real gate, and the owner's
+approval on top of it.
