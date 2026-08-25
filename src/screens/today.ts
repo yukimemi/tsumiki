@@ -88,6 +88,114 @@ export function todayRowsFor(input: {
   );
 }
 
+/** Where rows with no `category` collect. Always last. */
+export const UNFILED_LABEL = "そのほか";
+
+/**
+ * Bucket key for rows with no category.
+ *
+ * Not `UNFILED_LABEL`: keying on the display name means a chore actually
+ * filed under 「そのほか」 lands in the same bucket as the unfiled ones and
+ * can never be told apart again — its rows, its counts and its late flag all
+ * merge into theirs. A NUL cannot survive `trim()` on a typed name, so this
+ * key cannot collide with one. The editor also refuses the name outright, so
+ * two groups never *show* the same header; this is the half that keeps the
+ * arithmetic right whatever is already in the data.
+ */
+const UNFILED_KEY = "\u0000unfiled";
+
+export type TodayGroup = {
+  /**
+   * Stable identity, distinct from `label`.
+   *
+   * The unfiled group and a group actually filed under 「そのほか」 render
+   * the same header, so the label cannot serve as a React key or as the
+   * handle for per-group UI state — they would collide exactly where the
+   * bucket key stops them colliding.
+   */
+  key: string;
+  /** The category name, or `UNFILED_LABEL`. */
+  label: string;
+  rows: TodayRow[];
+  done: number;
+  total: number;
+  /** True when something in here is past its time — see `groupTodayRows`. */
+  hasLate: boolean;
+};
+
+/**
+ * The same rows, in labelled groups.
+ *
+ * Group order is the smallest `task.order` in the group, which means the
+ * ▲▼ reordering a parent already has in やること管理 decides it: put the
+ * chores of a group next to each other and the group moves with them. A
+ * second ordering concept — per-category positions, another editor, another
+ * field to keep in step — buys nothing that is not already expressible.
+ *
+ * `そのほか` is pinned last however its tasks are ordered, because "not
+ * filed yet" is not a rank.
+ *
+ * Row order *inside* a group is left exactly as `todayRowsFor` sorted it, so
+ * late and redo rows still surface first where a child is looking. What
+ * grouping does cost is the global view of that: a late chore in the third
+ * group is no longer the first thing on screen. `hasLate` exists so the
+ * header can say so without the child having to open the group to find out.
+ */
+export function groupTodayRows(rows: TodayRow[]): TodayGroup[] {
+  const buckets = new Map<string, TodayGroup>();
+  const ranks = new Map<string, number>();
+
+  for (const row of rows) {
+    const filed = row.task.category?.trim();
+    const key = filed || UNFILED_KEY;
+    const bucket = buckets.get(key) ?? {
+      key,
+      label: filed || UNFILED_LABEL,
+      rows: [],
+      done: 0,
+      total: 0,
+      hasLate: false,
+    };
+    bucket.rows.push(row);
+    bucket.total += 1;
+    if (row.state === "approved") bucket.done += 1;
+    if (row.state === "late") bucket.hasLate = true;
+    buckets.set(key, bucket);
+
+    // Unfiled sorts after every real group whatever its tasks' order.
+    const rank = filed ? row.task.order : Number.POSITIVE_INFINITY;
+    ranks.set(key, Math.min(ranks.get(key) ?? Number.POSITIVE_INFINITY, rank));
+  }
+
+  // Compared rather than subtracted: the unfiled group's rank is Infinity,
+  // and Infinity - Infinity is NaN, which would make the sort order
+  // undefined the day a second sentinel group exists.
+  return [...buckets.entries()]
+    .sort(([ka, a], [kb, b]) => {
+      const ra = ranks.get(ka) ?? 0;
+      const rb = ranks.get(kb) ?? 0;
+      if (ra !== rb) return ra < rb ? -1 : 1;
+      return a.label.localeCompare(b.label, "ja");
+    })
+    .map(([, group]) => group);
+}
+
+/**
+ * Every category already in use, for offering them instead of retyping.
+ *
+ * `そのほか` is filtered out even if a task somehow carries it: suggesting
+ * the name the unfiled group already displays would invite two sections with
+ * one header.
+ */
+export function categoriesOf(tasks: Task[]): string[] {
+  const seen = new Set<string>();
+  for (const task of tasks) {
+    const label = task.category?.trim();
+    if (label && label !== UNFILED_LABEL) seen.add(label);
+  }
+  return [...seen].sort((a, b) => a.localeCompare(b, "ja"));
+}
+
 /**
  * The ring at the top of the screen. Only an approved entry counts as done
  * and only approved entries pay — pending coins are a promise, not earnings.

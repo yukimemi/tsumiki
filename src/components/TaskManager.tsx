@@ -10,6 +10,7 @@ import {
 import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import { useAction } from "../screens/useAction";
 import type { MemberInfo, Role, Task } from "../types";
+import { categoriesOf } from "../screens/today";
 import { TaskEditor } from "./TaskEditor";
 import {
   Badge,
@@ -225,6 +226,7 @@ export function TaskManager(props: {
       )}
 
       <TaskEditor
+        categories={categoriesOf(all)}
         open={editing !== null}
         task={editing?.task ?? null}
         householdId={householdId}

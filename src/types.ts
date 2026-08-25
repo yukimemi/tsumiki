@@ -81,6 +81,18 @@ export type Task = {
   title: string;
   note?: string;
   emoji: string;
+  /**
+   * Free-text grouping label, e.g. "おてつだい". Deliberately a plain string
+   * on the task rather than its own entity: a family has a handful of these,
+   * and a separate collection would buy an id, a rules block and a
+   * management screen to express what one word already says. Group order
+   * falls out of `order` (see `groupTodayRows`), so there is nothing extra
+   * to sort either.
+   *
+   * Absent means "not filed", which is a normal state and not a migration to
+   * finish — those rows collect under そのほか at the bottom.
+   */
+  category?: string;
   /** Coins granted per completion. */
   coin: number;
   /** When true a completion lands as `pending` and waits for a parent. */

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { createTask, updateTask } from "../data/tasks";
 import type { TaskDraft, TaskPatch } from "../data/tasks";
 import { WEEKDAY_LABELS_JA } from "../lib/date";
+import { UNFILED_LABEL } from "../screens/today";
 import { useAction } from "../screens/useAction";
 import type { MemberInfo, RepeatRule, RepeatType, Role, Task } from "../types";
 import {
@@ -70,6 +71,16 @@ const schema = z
       .min(1, "なまえを いれてね")
       .max(40, "なまえは 40もじまでに してね"),
     emoji: z.string().min(1, "えもじを えらんでね"),
+    category: z
+      .string()
+      .trim()
+      .max(20, "グループは 20もじまでに してね")
+      // The unfiled group already shows this name, so letting a parent type
+      // it would put the same header on two sections.
+      .refine(
+        (value) => value !== UNFILED_LABEL,
+        `「${UNFILED_LABEL}」は グループが ないときの なまえだよ`,
+      ),
     coin: z
       .number()
       .int("コインは せいすうで いれてね")
@@ -147,6 +158,7 @@ function valuesOf(task: Task | null): FormValues {
   return {
     title: task?.title ?? "",
     emoji: task?.emoji ?? "🧱",
+    category: task?.category ?? "",
     // A chore worth nothing is never what a parent means to create.
     coin: task?.coin ?? 1,
     // The safe default: coins arrive once a parent has looked.
@@ -178,6 +190,7 @@ function draftOf(values: FormValues, members: Member[]): TaskDraft {
   return {
     title: values.title.trim(),
     emoji: values.emoji,
+    category: values.category.trim(),
     coin: values.coin,
     needsApproval: values.needsApproval,
     needsPhoto: values.needsPhoto,
@@ -207,9 +220,20 @@ export function TaskEditor(props: {
   actorUid: string;
   members: Member[];
   coinYen: number;
+  /** Names already in use, offered so groups are picked rather than retyped. */
+  categories: string[];
   onClose(): void;
 }): JSX.Element {
-  const { open, task, householdId, actorUid, members, coinYen, onClose } = props;
+  const {
+    open,
+    task,
+    householdId,
+    actorUid,
+    members,
+    coinYen,
+    categories,
+    onClose,
+  } = props;
   const action = useAction();
   // The submit button sits in the pinned footer, outside the <form>; the
   // button's `form` attribute is what connects the two.
@@ -230,6 +254,7 @@ export function TaskEditor(props: {
           ...draft,
           dueTime: draft.dueTime || null,
           note: draft.note || null,
+          category: draft.category || null,
         };
         await updateTask(task.id, patch);
       } else {
@@ -274,6 +299,7 @@ export function TaskEditor(props: {
           task={task}
           members={members}
           coinYen={coinYen}
+          categories={categories}
           onSubmit={submit}
         />
       ) : null}
@@ -286,9 +312,11 @@ function TaskForm(props: {
   task: Task | null;
   members: Member[];
   coinYen: number;
+  categories: string[];
   onSubmit(values: FormValues): Promise<void>;
 }): JSX.Element {
-  const { formId, task, members, coinYen } = props;
+  const { formId, task, members, coinYen, categories } = props;
+  const categoryListId = useId();
   const {
     register,
     control,
@@ -310,6 +338,32 @@ function TaskForm(props: {
       className="space-y-5"
       noValidate
     >
+      {/*
+        A free-text box with a datalist rather than a picker over a managed
+        list of categories: a family runs a handful of these, and the whole
+        point of grouping is lost if filing a chore first means opening a
+        second screen to invent a group. The suggestions are what keep
+        「おてつだい」 from quietly becoming two groups.
+      */}
+      <Field
+        label="グループ（なくても いいよ）"
+        hint="おなじ なまえの やることが まとまって でるよ"
+        error={errors.category?.message}
+      >
+        <Input
+          {...register("category")}
+          list={categoryListId}
+          placeholder="おてつだい"
+          autoComplete="off"
+          maxLength={20}
+        />
+        <datalist id={categoryListId}>
+          {categories.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </Field>
+
       <Field label="なまえ" error={errors.title?.message}>
         <Input
           {...register("title")}

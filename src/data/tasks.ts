@@ -126,20 +126,27 @@ export async function createTask(
  * who set a due time could never take it off again.
  */
 export type TaskPatch = Partial<
-  Omit<TaskDraft, "dueTime" | "note">
+  Omit<TaskDraft, "dueTime" | "note" | "category">
 > & {
   dueTime?: string | null;
   note?: string | null;
+  category?: string | null;
 };
 
 export async function updateTask(id: string, patch: TaskPatch): Promise<void> {
-  const { dueTime, note, ...rest } = patch;
+  const { dueTime, note, category, ...rest } = patch;
   const payload: Record<string, unknown> = forMerge(rest);
   if (dueTime !== undefined) {
     payload.dueTime = dueTime === null || dueTime === "" ? deleteField() : dueTime;
   }
   if (note !== undefined) {
     payload.note = note === null || note === "" ? deleteField() : note;
+  }
+  // Same sentinel story as the two above: emptying the field is how a parent
+  // takes a task back out of a group, and `clean` would read "" as absence.
+  if (category !== undefined) {
+    payload.category =
+      category === null || category === "" ? deleteField() : category;
   }
   await updateDoc(doc(db(), COL, id), payload);
 }

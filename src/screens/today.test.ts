@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { Entry, EntryStatus, RepeatRule, Task } from "../types";
-import { progressOf, todayRowsFor } from "./today";
+import {
+  UNFILED_LABEL,
+  categoriesOf,
+  groupTodayRows,
+  progressOf,
+  todayRowsFor,
+} from "./today";
 
 function task(overrides: Partial<Task> & { repeat?: RepeatRule } = {}): Task {
   return {
@@ -164,6 +170,137 @@ describe("todayRowsFor", () => {
       "pending",
       "approved",
     ]);
+  });
+});
+
+describe("groupTodayRows", () => {
+  it("orders groups by the earliest task in each, so ▲▼ already controls it", () => {
+    const rows = rowsFor({
+      tasks: [
+        task({ id: "a", order: 3, category: "おてつだい" }),
+        task({ id: "b", order: 0, category: "みのまわり" }),
+        task({ id: "c", order: 4, category: "おてつだい" }),
+        task({ id: "d", order: 1, category: "みのまわり" }),
+      ],
+    });
+    expect(groupTodayRows(rows).map((g) => g.label)).toEqual([
+      "みのまわり",
+      "おてつだい",
+    ]);
+  });
+
+  it("keeps unfiled rows last however their tasks are ordered", () => {
+    const rows = rowsFor({
+      tasks: [
+        task({ id: "a", order: 0 }),
+        task({ id: "b", order: 9, category: "おてつだい" }),
+      ],
+    });
+    const groups = groupTodayRows(rows);
+    expect(groups.map((g) => g.label)).toEqual(["おてつだい", UNFILED_LABEL]);
+  });
+
+  it("treats a blank or whitespace category as unfiled", () => {
+    const rows = rowsFor({
+      tasks: [
+        task({ id: "a", order: 0, category: "   " }),
+        task({ id: "b", order: 1, category: "" }),
+      ],
+    });
+    const groups = groupTodayRows(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBe(UNFILED_LABEL);
+    expect(groups[0].total).toBe(2);
+  });
+
+  it("files rows under the trimmed name, so a stray space is not a new group", () => {
+    const rows = rowsFor({
+      tasks: [
+        task({ id: "a", order: 0, category: "おてつだい" }),
+        task({ id: "b", order: 1, category: " おてつだい " }),
+      ],
+    });
+    const groups = groupTodayRows(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].total).toBe(2);
+  });
+
+  it("counts what is done per group without touching row order", () => {
+    const rows = rowsFor({
+      tasks: [
+        task({ id: "a", order: 0, category: "おてつだい" }),
+        task({ id: "b", order: 1, category: "おてつだい" }),
+      ],
+      entries: [entry("a", "kid", TODAY, "approved")],
+    });
+    const [group] = groupTodayRows(rows);
+    expect({ done: group.done, total: group.total }).toEqual({
+      done: 1,
+      total: 2,
+    });
+    // `todayRowsFor` already put the undone row first; grouping must not
+    // reshuffle inside a group.
+    expect(group.rows.map((r) => r.task.id)).toEqual(["b", "a"]);
+  });
+
+  it("flags a group holding a late row, so grouping cannot bury it", () => {
+    const rows = rowsFor({
+      tasks: [
+        task({ id: "a", order: 0, category: "あさ" }),
+        task({ id: "b", order: 1, category: "よる", dueTime: "07:00" }),
+      ],
+      nowHm: "10:00",
+    });
+    const byLabel = Object.fromEntries(
+      groupTodayRows(rows).map((g) => [g.label, g.hasLate]),
+    );
+    expect(byLabel).toEqual({ あさ: false, よる: true });
+  });
+
+  it("keeps a group actually named そのほか apart from the unfiled one", () => {
+    // The bucket key is not the display label, so the two cannot merge —
+    // their rows, counts and late flags stay separate even though the editor
+    // refuses to create this name in the first place.
+    const rows = rowsFor({
+      tasks: [
+        task({ id: "a", order: 0, category: UNFILED_LABEL, dueTime: "07:00" }),
+        task({ id: "b", order: 1 }),
+      ],
+      nowHm: "10:00",
+    });
+    const groups = groupTodayRows(rows);
+    expect(groups).toHaveLength(2);
+    expect(groups.map((g) => g.total)).toEqual([1, 1]);
+    // The filed one keeps its own late flag instead of donating it.
+    expect(groups.map((g) => g.hasLate)).toEqual([true, false]);
+    expect(groups.map((g) => g.rows[0].task.id)).toEqual(["a", "b"]);
+    // Identity the UI can key on: same header, different groups.
+    expect(groups[0].label).toBe(groups[1].label);
+    expect(groups[0].key).not.toBe(groups[1].key);
+  });
+
+  it("returns nothing for no rows", () => {
+    expect(groupTodayRows([])).toEqual([]);
+  });
+});
+
+describe("categoriesOf", () => {
+  it("lists each name once, trimmed, ignoring the unfiled ones", () => {
+    expect(
+      categoriesOf([
+        task({ id: "a", category: "おてつだい" }),
+        task({ id: "b", category: " おてつだい " }),
+        task({ id: "c", category: "みのまわり" }),
+        task({ id: "d" }),
+        task({ id: "e", category: "  " }),
+      ]),
+    ).toEqual(["おてつだい", "みのまわり"]);
+  });
+
+  it("never offers そのほか back, whatever is in the data", () => {
+    expect(categoriesOf([task({ id: "a", category: UNFILED_LABEL })])).toEqual(
+      [],
+    );
   });
 });
 
