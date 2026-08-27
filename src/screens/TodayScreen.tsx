@@ -33,8 +33,8 @@ import { addDaysKey, formatDateJa, nowHm, todayKey } from "../lib/date";
 import { entryId } from "../lib/ids";
 import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import type { Entry } from "../types";
-import { progressOf, todayRowsFor } from "./today";
-import type { TodayRow } from "./today";
+import { UNFILED_LABEL, groupTodayRows, progressOf, todayRowsFor } from "./today";
+import type { TodayGroup, TodayRow } from "./today";
 import { useAction } from "./useAction";
 
 /**
@@ -69,6 +69,12 @@ export function TodayScreen(): JSX.Element {
   const [pendingPhotoOrigin, setPendingPhotoOrigin] = useState<DOMRect | null>(
     null,
   );
+  // Only the groups the child has actually tapped. Everything else follows
+  // the rule below, so a group that finishes while the screen is open folds
+  // itself away — and one that was deliberately opened stays open.
+  const [groupOverrides, setGroupOverrides] = useState<Record<string, boolean>>(
+    {},
+  );
 
   // A parent who switched to someone who has since left falls back to self.
   const shownMemberId = members.some((member) => member.uid === pickedMemberId)
@@ -100,6 +106,18 @@ export function TodayScreen(): JSX.Element {
     nowHm: nowHm(),
   });
 
+  const groups = groupTodayRows(rows);
+  // A family that has never filed anything sees exactly what it saw before:
+  // one unnamed pile, no headers. Grouping should arrive when it is asked
+  // for, not as a row of "そのほか" over an unchanged list.
+  const showGroups = groups.length > 1 || groups[0]?.label !== UNFILED_LABEL;
+  // Done groups fold away, which is the point: the list shrinks as the day
+  // goes, exactly when a long list stops being useful.
+  // Keyed by `group.key`, not by the header text: two groups can display the
+  // same name, and folding one must not fold the other.
+  const groupOpen = (group: TodayGroup): boolean =>
+    groupOverrides[group.key] ?? !(group.total > 0 && group.done === group.total);
+
   const progress = progressOf(rows);
   const coinYen = household?.coinYen ?? 0;
   const loading = tasks.loading || dayEntries.loading;
@@ -111,6 +129,30 @@ export function TodayScreen(): JSX.Element {
   const commentsEntry = commentsRow?.entry ?? null;
 
   const detailRow = rows.find((row) => row.task.id === detailTaskId) ?? null;
+
+  /** One row, identical whether the list is grouped or flat. */
+  const taskItem = (row: TodayRow): JSX.Element => (
+    <li key={row.task.id}>
+      <TaskRow
+        row={row}
+        coinYen={coinYen}
+        busy={action.busy || isFuture}
+        canUndo={
+          row.entry !== null &&
+          (row.entry.memberId === uid || isParent) &&
+          !isFuture
+        }
+        onComplete={(origin) => requestComplete(row, origin)}
+        onUndo={() => {
+          if (row.entry) handleUndo(row.entry);
+        }}
+        onOpenDetail={() => setDetailTaskId(row.task.id)}
+        onOpenComments={() => {
+          if (row.entry) setCommentsTaskId(row.task.id);
+        }}
+      />
+    </li>
+  );
 
   const handleComplete = (
     row: TodayRow,
@@ -304,31 +346,47 @@ export function TodayScreen(): JSX.Element {
             emoji="🧺"
           />
         </Card>
+      ) : !showGroups ? (
+        <ul className="space-y-2">{rows.map(taskItem)}</ul>
       ) : (
-        <ul className="space-y-2">
-          {rows.map((row) => (
-            <li key={row.task.id}>
-              <TaskRow
-                row={row}
-                coinYen={coinYen}
-                busy={action.busy || isFuture}
-                canUndo={
-                  row.entry !== null &&
-                  (row.entry.memberId === uid || isParent) &&
-                  !isFuture
-                }
-                onComplete={(origin) => requestComplete(row, origin)}
-                onUndo={() => {
-                  if (row.entry) handleUndo(row.entry);
-                }}
-                onOpenDetail={() => setDetailTaskId(row.task.id)}
-                onOpenComments={() => {
-                  if (row.entry) setCommentsTaskId(row.task.id);
-                }}
-              />
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-3">
+          {groups.map((group) => {
+            const open = groupOpen(group);
+            return (
+              <section key={group.key} aria-label={group.label}>
+                <h2 className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() =>
+                      setGroupOverrides((prev) => ({
+                        ...prev,
+                        [group.key]: !open,
+                      }))
+                    }
+                    className="flex min-h-tap flex-1 items-center gap-2 rounded-card px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-self"
+                  >
+                    <span aria-hidden="true" className="text-muted">
+                      {open ? "▾" : "▸"}
+                    </span>
+                    <span className="min-w-0 truncate text-base font-bold text-ink">
+                      {group.label}
+                    </span>
+                    {/* Grouping can push a late chore below the fold, so the
+                        header carries the fact up to where it is visible. */}
+                    {group.hasLate ? <Badge tone="late">おくれてる</Badge> : null}
+                    <span className="ml-auto pr-1 text-sm tabular-nums text-muted">
+                      {group.done}/{group.total}
+                    </span>
+                  </button>
+                </h2>
+                {open ? (
+                  <ul className="mt-1 space-y-2">{group.rows.map(taskItem)}</ul>
+                ) : null}
+              </section>
+            );
+          })}
+        </div>
       )}
 
       <Sheet
