@@ -1,15 +1,15 @@
 preset = "github.com/yukimemi/pj-presets:web-react-firebase"
-applied_at = "2026-08-23T02:34:39.4176105Z"
+applied_at = "2026-08-28T14:02:14.55556Z"
 
 [[templates]]
 source = "github.com/yukimemi/pj-base"
-rev = "62de494e1dc6fa312924f2d9dee80b22fcf8d2ab"
-version = "0.15.0"
+rev = "6b66bd5112f42490d972b282585040f19d09ede4"
+version = "0.18.0"
 
 [[templates]]
 source = "github.com/yukimemi/pj-pnpm"
-rev = "73b6cb62279636896781f781a91aeccb576f10fb"
-version = "0.1.0"
+rev = "00962d56f4ebc7918ec1b70faba72610514945d3"
+version = "0.3.0"
 
 [[templates]]
 source = "github.com/yukimemi/pj-react-web"
@@ -40,19 +40,22 @@ content_hash = "486c974de88903113ed99b4e643432b7050e88f1031276f5263e8da7b43fe11e
 content_hash = "6d380d1ecc2f882c2011429d548a6f3c774b74f0c757d884453e4667172acc2a"
 
 [files.".github/workflows/apm-bump.yml"]
-content_hash = "f1cf3615e0f5ff443860722da8d7f74530eaa37e755e65f4392a0c25cd83917e"
+content_hash = "0ac5ed2847ab6e1041e34209dcc2396a582722ea9537d03bd950e1db1851a4b7"
+
+[files.".github/workflows/ci.yml"]
+content_hash = "2860bd388a4b591beb34e390ed2ebacfc6025449fdb8f919a774907d555ecdc8"
 
 [files.".github/workflows/claude-review.yml"]
-content_hash = "b6b6c2bfe826aeb9a07023d216f5b9055e92429f1a95f729391aca0c9d107bde"
+content_hash = "4a8e47aabb3cdf2a59030d5194467022f0efb53bb1819d4495752020d10be773"
 
 [files.".github/workflows/claude.yml"]
-content_hash = "432ce337cc27a74e6bc05f87aa5163296799b06f31d4759dc800c619254a3317"
+content_hash = "c83b52d5f483fdec494028b932facf98018500ce757718cc2e3703328688f5ad"
 
 [files.".github/workflows/deploy.yml"]
 once_applied = true
 
 [files.".github/workflows/kata-apply.yml"]
-content_hash = "f58d2d3286699276c635bf45e3fc6dca9226cba1eb3461758d7f805682cce101"
+content_hash = "7000353151b01b5d14cb8f56e314b1a25b020e22bdf5842dcaf5686efb59facb"
 
 [files.".gitignore"]
 content_hash = "99ce77ba843c5bee84182b768f18a501f6e76eef3731eb0e899997b33b7c8468"
