@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { Balance, Entry, EntryStatus } from "../types";
-import { earnedTotals, periodTotals, rankByCoins } from "./ranking";
+import type { Balance, Entry, EntryStatus, LedgerEntry, LedgerReason } from "../types";
+import { earnedTotals, ledgerTotals, mergeTotals, periodTotals, rankByCoins } from "./ranking";
 
 let seq = 0;
 
@@ -36,6 +36,19 @@ function balance(memberId: string, coins: number, earned: number): Balance {
     coins,
     earned,
     updatedAt: null as unknown as Balance["updatedAt"],
+  };
+}
+
+function ledgerRow(memberId: string, delta: number, reason: LedgerReason): LedgerEntry {
+  seq += 1;
+  return {
+    id: `ledger-${seq}`,
+    householdId: "h1",
+    memberId,
+    delta,
+    reason,
+    actorId: "parent1",
+    createdAt: null as unknown as LedgerEntry["createdAt"],
   };
 }
 
@@ -189,5 +202,55 @@ describe("earnedTotals", () => {
 
   it("gives a member with no balance document a zero", () => {
     expect(earnedTotals([], ["a"])).toEqual([{ memberId: "a", coins: 0 }]);
+  });
+});
+
+describe("ledgerTotals", () => {
+  it("sums positive bonus and adjust grants per member", () => {
+    const ledger = [
+      ledgerRow("a", 5, "bonus"),
+      ledgerRow("a", 3, "adjust"),
+      ledgerRow("b", 10, "bonus"),
+    ];
+    expect(ledgerTotals(ledger, ["a", "b"])).toEqual([
+      { memberId: "a", coins: 8 },
+      { memberId: "b", coins: 10 },
+    ]);
+  });
+
+  it("ignores task rows, since periodTotals already counts the entry", () => {
+    const ledger = [ledgerRow("a", 5, "task")];
+    expect(ledgerTotals(ledger, ["a"])).toEqual([{ memberId: "a", coins: 0 }]);
+  });
+
+  it("ignores payout rows and negative adjust corrections", () => {
+    const ledger = [ledgerRow("a", -5, "payout"), ledgerRow("a", -2, "adjust")];
+    expect(ledgerTotals(ledger, ["a"])).toEqual([{ memberId: "a", coins: 0 }]);
+  });
+
+  it("gives a member with no ledger rows a zero", () => {
+    expect(ledgerTotals([], ["a"])).toEqual([{ memberId: "a", coins: 0 }]);
+  });
+});
+
+describe("mergeTotals", () => {
+  it("adds a second board's coins onto the first, per member", () => {
+    const a = [
+      { memberId: "a", coins: 7, done: 2 },
+      { memberId: "b", coins: 5, done: 1 },
+    ];
+    const b = [
+      { memberId: "a", coins: 3 },
+      { memberId: "b", coins: 0 },
+    ];
+    expect(mergeTotals(a, b)).toEqual([
+      { memberId: "a", coins: 10, done: 2 },
+      { memberId: "b", coins: 5, done: 1 },
+    ]);
+  });
+
+  it("treats a member missing from the second board as contributing zero", () => {
+    const a = [{ memberId: "a", coins: 7 }];
+    expect(mergeTotals(a, [])).toEqual([{ memberId: "a", coins: 7 }]);
   });
 });

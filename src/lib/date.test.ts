@@ -6,6 +6,7 @@ import {
   dayOfMonthKey,
   formatDateJa,
   formatMonthJa,
+  lastDayOfMonthKey,
   monthGrid,
   monthKeyOf,
   nowHm,
@@ -150,5 +151,23 @@ describe("Japanese formatting", () => {
     expect(WEEKDAY_LABELS_JA[0]).toBe("日");
     expect(WEEKDAY_LABELS_JA[6]).toBe("土");
     expect(WEEKDAY_LABELS_JA[weekdayOfKey("2026-08-17")]).toBe("月");
+  });
+});
+
+describe("lastDayOfMonthKey", () => {
+  it("stays inside February on a leap year", () => {
+    expect(lastDayOfMonthKey("2024-02")).toBe("2024-02-29");
+  });
+
+  it("stays inside February on a non-leap year, never overflowing into March", () => {
+    expect(lastDayOfMonthKey("2026-02")).toBe("2026-02-28");
+  });
+
+  it("returns the 31st for a 31-day month", () => {
+    expect(lastDayOfMonthKey("2026-08")).toBe("2026-08-31");
+  });
+
+  it("returns the 30th for a 30-day month", () => {
+    expect(lastDayOfMonthKey("2026-04")).toBe("2026-04-30");
   });
 });

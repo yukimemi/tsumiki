@@ -17,7 +17,7 @@ import {
   Skeleton,
   Textarea,
 } from "../components/ui";
-import { useBalances } from "../data/coins";
+import { useBalances, useLedgerInRange } from "../data/coins";
 import { approveEntry, rejectEntry, useEntriesInRange } from "../data/entries";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
@@ -25,6 +25,7 @@ import {
   addDaysKey,
   dateKeyOf,
   formatDateJa,
+  lastDayOfMonthKey,
   monthKeyOf,
   parseDateKey,
   todayKey,
@@ -34,7 +35,7 @@ import {
 } from "../lib/date";
 import { streakFor } from "../lib/streak";
 import type { Entry } from "../types";
-import { earnedTotals, periodTotals, rankByCoins } from "./ranking";
+import { earnedTotals, ledgerTotals, mergeTotals, periodTotals, rankByCoins } from "./ranking";
 import type { RankPeriod } from "./ranking";
 import { approvedDateKeys, dayCellsFor, weeklySeries } from "./records";
 
@@ -107,17 +108,33 @@ export function RecordsScreen(): JSX.Element {
   const thisWeek = weekKeys(today);
   const thisMonth = monthKeyOf(today);
   const memberIds = members.map((member) => member.uid);
+  const rankFromKey = rankPeriod === "week" ? thisWeek[0] : `${thisMonth}-01`;
+  // `lastDayOfMonthKey`, not a fixed `-31`: that string compares fine but
+  // `useLedgerInRange` parses it into a real Date, and `parseDateKey`
+  // normalizes "2026-02-31" to March 3 — pushing the ledger query's window
+  // past the month it is supposed to cover.
+  const rankToKey = rankPeriod === "week" ? thisWeek[6] : lastDayOfMonthKey(thisMonth);
+  // A gift or correction never becomes an Entry, so periodTotals alone would
+  // never see it; this subscription is the ledger-side counterpart, scoped to
+  // the exact period the board is showing (skipped entirely on 「ずっと」,
+  // which reads Balance.earned instead).
+  const periodLedger = useLedgerInRange(
+    rankPeriod === "all" ? null : householdId,
+    rankFromKey,
+    rankToKey,
+  );
   const rankRows = rankByCoins(
     rankPeriod === "all"
       ? earnedTotals(balances.data, memberIds)
-      : periodTotals({
-          entries: historyEntries.data,
-          memberIds,
-          fromKey: rankPeriod === "week" ? thisWeek[0] : `${thisMonth}-01`,
-          // Date keys sort as dates, so a bound past the end of the month
-          // covers February and August alike.
-          toKey: rankPeriod === "week" ? thisWeek[6] : `${thisMonth}-31`,
-        }),
+      : mergeTotals(
+          periodTotals({
+            entries: historyEntries.data,
+            memberIds,
+            fromKey: rankFromKey,
+            toKey: rankToKey,
+          }),
+          ledgerTotals(periodLedger.data, memberIds),
+        ),
   );
 
   const fail = (error: unknown): never => {
@@ -274,7 +291,11 @@ export function RecordsScreen(): JSX.Element {
         currentUid={uid}
         period={rankPeriod}
         onPeriod={setRankPeriod}
-        loading={rankPeriod === "all" ? balances.loading : historyEntries.loading}
+        loading={
+          rankPeriod === "all"
+            ? balances.loading
+            : historyEntries.loading || periodLedger.loading
+        }
       />
 
       <Card>

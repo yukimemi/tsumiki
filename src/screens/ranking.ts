@@ -15,7 +15,7 @@
 // Like everywhere else, only `approved` entries count: a pending completion
 // has not happened yet and a rejected one never did.
 
-import type { Balance, Entry } from "../types";
+import type { Balance, Entry, LedgerEntry } from "../types";
 
 /** Which stretch of time the board is measuring. */
 export type RankPeriod = "week" | "month" | "all";
@@ -120,5 +120,47 @@ export function earnedTotals(
   return memberIds.map((memberId) => ({
     memberId,
     coins: balances.find((balance) => balance.memberId === memberId)?.earned ?? 0,
+  }));
+}
+
+/**
+ * Coins a member picked up outside the entry ledger — a parent's bonus grant
+ * or a manual correction — for the same week/month board `periodTotals`
+ * builds from entries. `task`-reason rows are the coin side of an approved
+ * entry and already counted there, and `payout` only ever spends, so neither
+ * belongs here. A negative `adjust` is a takeback, not something earned, so
+ * only positive movements count — the same rule `Balance.earned` itself
+ * follows (see `adjustCoins`).
+ */
+export function ledgerTotals(
+  ledger: readonly LedgerEntry[],
+  memberIds: readonly string[],
+): RankInput[] {
+  const totals = new Map<string, RankInput>(
+    memberIds.map((memberId) => [memberId, { memberId, coins: 0 }]),
+  );
+
+  for (const row of ledger) {
+    if (row.reason === "task" || row.reason === "payout") continue;
+    if (row.delta <= 0) continue;
+    const target = totals.get(row.memberId);
+    if (!target) continue;
+    target.coins += row.delta;
+  }
+
+  return [...totals.values()];
+}
+
+/**
+ * Add a second totals board onto a first, per member — used to fold
+ * `ledgerTotals` into `periodTotals` so a gift lands on the same week/month
+ * board as an approved chore. Completion counts come from `a` only; a ledger
+ * grant is not a completion.
+ */
+export function mergeTotals(a: readonly RankInput[], b: readonly RankInput[]): RankInput[] {
+  const byMember = new Map(b.map((row) => [row.memberId, row]));
+  return a.map((row) => ({
+    ...row,
+    coins: row.coins + (byMember.get(row.memberId)?.coins ?? 0),
   }));
 }
