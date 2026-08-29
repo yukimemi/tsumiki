@@ -13,6 +13,11 @@ export function isTaskDueOn(task: Task, dateKey: string): boolean {
     case "once":
     case "daily":
       return true;
+    // Any day within the week/month counts toward the quota — the caller
+    // that knows about entries retires the row once the quota is met.
+    case "weeklyCount":
+    case "monthlyCount":
+      return true;
     case "weekly":
       return task.repeat.weekdays.includes(weekdayOfKey(dateKey));
     case "monthly":

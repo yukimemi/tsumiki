@@ -11,6 +11,7 @@ import {
   nowHm,
   parseDateKey,
   todayKey,
+  weekKeyOf,
   weekKeys,
   weekdayOfKey,
 } from "./date";
@@ -96,6 +97,19 @@ describe("weekKeys", () => {
     for (const key of fromMonday) {
       expect(weekKeys(key)).toEqual(fromMonday);
     }
+  });
+});
+
+describe("weekKeyOf", () => {
+  it("returns the same Monday for every day inside the week", () => {
+    for (const key of weekKeys("2026-08-17")) {
+      expect(weekKeyOf(key)).toBe("2026-08-17");
+    }
+  });
+
+  it("returns a different key for the week before and after", () => {
+    expect(weekKeyOf("2026-08-16")).toBe("2026-08-10"); // Sunday, prior week
+    expect(weekKeyOf("2026-08-24")).toBe("2026-08-24"); // Monday, next week
   });
 });
 

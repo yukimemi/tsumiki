@@ -50,6 +50,12 @@ const EMOJI_CHOICES: readonly string[] = [
 
 const MAX_COIN = 999;
 
+/** A week has 7 days; more than that is just "まいにち" already. */
+const MAX_WEEKLY_COUNT = 7;
+
+/** A month has at most 31 days, same reasoning as `MAX_WEEKLY_COUNT`. */
+const MAX_MONTHLY_COUNT = 31;
+
 const MONTH_DAYS: readonly number[] = Array.from(
   { length: 31 },
   (_, index) => index + 1,
@@ -60,6 +66,8 @@ const REPEAT_OPTIONS: readonly SegmentedOption<RepeatType>[] = [
   { value: "daily", label: "まいにち" },
   { value: "weekly", label: "まいしゅう" },
   { value: "monthly", label: "まいつき" },
+  { value: "weeklyCount", label: "しゅうに○かい" },
+  { value: "monthlyCount", label: "つきに○かい" },
 ];
 
 /** Schema lives next to its form, per the project's convention. */
@@ -89,9 +97,17 @@ const schema = z
     needsApproval: z.boolean(),
     needsPhoto: z.boolean(),
     assigneeIds: z.array(z.string()),
-    repeatType: z.enum(["once", "daily", "weekly", "monthly"]),
+    repeatType: z.enum([
+      "once",
+      "daily",
+      "weekly",
+      "monthly",
+      "weeklyCount",
+      "monthlyCount",
+    ]),
     weekdays: z.array(z.number().int().min(0).max(6)),
     monthDays: z.array(z.number().int().min(1).max(31)),
+    periodCount: z.number().int().min(1, "1いじょうに してね"),
     dueTime: z
       .string()
       .refine(
@@ -113,6 +129,26 @@ const schema = z
         code: "custom",
         path: ["monthDays"],
         message: "ひづけを えらんでね",
+      });
+    }
+    if (
+      values.repeatType === "weeklyCount" &&
+      values.periodCount > MAX_WEEKLY_COUNT
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["periodCount"],
+        message: `しゅうは ${MAX_WEEKLY_COUNT}かいまでです`,
+      });
+    }
+    if (
+      values.repeatType === "monthlyCount" &&
+      values.periodCount > MAX_MONTHLY_COUNT
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["periodCount"],
+        message: `つきは ${MAX_MONTHLY_COUNT}かいまでです`,
       });
     }
   });
@@ -142,6 +178,11 @@ function clampCoin(value: number): number {
   return Math.min(MAX_COIN, Math.max(0, Math.round(value)));
 }
 
+function clampCount(value: number, max: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(max, Math.max(1, Math.round(value)));
+}
+
 /**
  * react-hook-form types an error on an array of primitives as a merged
  * shape, so the root message is not reachable through `.message` alone.
@@ -169,6 +210,10 @@ function valuesOf(task: Task | null): FormValues {
     weekdays:
       repeat.type === "weekly" ? [...repeat.weekdays].sort(ascending) : [],
     monthDays: repeat.type === "monthly" ? [...repeat.days].sort(ascending) : [],
+    periodCount:
+      repeat.type === "weeklyCount" || repeat.type === "monthlyCount"
+        ? repeat.count
+        : 1,
     dueTime: task?.dueTime ?? "",
     note: task?.note ?? "",
   };
@@ -180,6 +225,10 @@ function repeatOf(values: FormValues): RepeatRule {
       return { type: "weekly", weekdays: [...values.weekdays].sort(ascending) };
     case "monthly":
       return { type: "monthly", days: [...values.monthDays].sort(ascending) };
+    case "weeklyCount":
+      return { type: "weeklyCount", count: values.periodCount };
+    case "monthlyCount":
+      return { type: "monthlyCount", count: values.periodCount };
     default:
       return { type: values.repeatType };
   }
@@ -574,6 +623,60 @@ function TaskForm(props: {
               </div>
             </Field>
           )}
+        />
+      ) : null}
+
+      {repeatType === "weeklyCount" || repeatType === "monthlyCount" ? (
+        <Controller
+          control={control}
+          name="periodCount"
+          render={({ field }) => {
+            const max =
+              repeatType === "weeklyCount" ? MAX_WEEKLY_COUNT : MAX_MONTHLY_COUNT;
+            const unit = repeatType === "weeklyCount" ? "しゅう" : "つき";
+            return (
+              <Field
+                label="なんかい"
+                hint={`いつやってもいいけど、1${unit}に これだけ できたら おわり`}
+                error={messageOf(errors.periodCount)}
+                group
+              >
+                <div className="flex items-center gap-2">
+                  <IconButton
+                    label="かいすうを へらす"
+                    disabled={field.value <= 1}
+                    onClick={() => field.onChange(clampCount(field.value - 1, max))}
+                  >
+                    −
+                  </IconButton>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={max}
+                    step={1}
+                    aria-label="かいすう"
+                    value={field.value}
+                    onBlur={field.onBlur}
+                    onChange={(event) =>
+                      field.onChange(clampCount(Number(event.target.value), max))
+                    }
+                    className="w-20 text-center tabular-nums"
+                  />
+                  <IconButton
+                    label="かいすうを ふやす"
+                    disabled={field.value >= max}
+                    onClick={() => field.onChange(clampCount(field.value + 1, max))}
+                  >
+                    ＋
+                  </IconButton>
+                  <span className="text-sm font-bold tabular-nums text-muted">
+                    かい / {unit}
+                  </span>
+                </div>
+              </Field>
+            );
+          }}
         />
       ) : null}
 
