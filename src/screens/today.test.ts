@@ -4,6 +4,7 @@ import type { Entry, EntryStatus, RepeatRule, Task } from "../types";
 import {
   UNFILED_LABEL,
   categoriesOf,
+  groupTasksByCategory,
   groupTodayRows,
   progressOf,
   todayRowsFor,
@@ -281,6 +282,68 @@ describe("groupTodayRows", () => {
 
   it("returns nothing for no rows", () => {
     expect(groupTodayRows([])).toEqual([]);
+  });
+});
+
+describe("groupTasksByCategory", () => {
+  it("orders groups by the earliest task in each, so ▲▼ already controls it", () => {
+    const tasks = [
+      task({ id: "a", order: 3, category: "おてつだい" }),
+      task({ id: "b", order: 0, category: "みのまわり" }),
+      task({ id: "c", order: 4, category: "おてつだい" }),
+      task({ id: "d", order: 1, category: "みのまわり" }),
+    ];
+    expect(groupTasksByCategory(tasks).map((g) => g.label)).toEqual([
+      "みのまわり",
+      "おてつだい",
+    ]);
+  });
+
+  it("keeps unfiled tasks last however they are ordered", () => {
+    const tasks = [
+      task({ id: "a", order: 0 }),
+      task({ id: "b", order: 9, category: "おてつだい" }),
+    ];
+    const groups = groupTasksByCategory(tasks);
+    expect(groups.map((g) => g.label)).toEqual(["おてつだい", UNFILED_LABEL]);
+  });
+
+  it("treats a blank or whitespace category as unfiled", () => {
+    const tasks = [
+      task({ id: "a", order: 0, category: "   " }),
+      task({ id: "b", order: 1, category: "" }),
+    ];
+    const groups = groupTasksByCategory(tasks);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].label).toBe(UNFILED_LABEL);
+    expect(groups[0].tasks).toHaveLength(2);
+  });
+
+  it("files tasks under the trimmed name, so a stray space is not a new group", () => {
+    const tasks = [
+      task({ id: "a", order: 0, category: "おてつだい" }),
+      task({ id: "b", order: 1, category: " おてつだい " }),
+    ];
+    const groups = groupTasksByCategory(tasks);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].tasks).toHaveLength(2);
+  });
+
+  it("keeps a group actually named そのほか apart from the unfiled one", () => {
+    const tasks = [
+      task({ id: "a", order: 0, category: UNFILED_LABEL }),
+      task({ id: "b", order: 1 }),
+    ];
+    const groups = groupTasksByCategory(tasks);
+    expect(groups).toHaveLength(2);
+    expect(groups.map((g) => g.tasks.length)).toEqual([1, 1]);
+    expect(groups.map((g) => g.tasks[0].id)).toEqual(["a", "b"]);
+    expect(groups[0].label).toBe(groups[1].label);
+    expect(groups[0].key).not.toBe(groups[1].key);
+  });
+
+  it("returns nothing for no tasks", () => {
+    expect(groupTasksByCategory([])).toEqual([]);
   });
 });
 

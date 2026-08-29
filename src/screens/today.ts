@@ -141,35 +141,50 @@ export type TodayGroup = {
  * group is no longer the first thing on screen. `hasLate` exists so the
  * header can say so without the child having to open the group to find out.
  */
-export function groupTodayRows(rows: TodayRow[]): TodayGroup[] {
-  const buckets = new Map<string, TodayGroup>();
+type CategoryBucket<T> = {
+  key: string;
+  label: string;
+  items: T[];
+};
+
+/**
+ * The shared shape behind every "group these by category" view: bucket by
+ * the trimmed category (blank collapses to the unfiled bucket, keyed apart
+ * from a group actually named `UNFILED_LABEL`), then order buckets by the
+ * smallest `order` inside them so ▲▼ reordering already decides group order
+ * too, with the unfiled bucket pinned last whatever its tasks' order is.
+ *
+ * `groupTodayRows` and `groupTasksByCategory` both reduce to this shape —
+ * one over `TodayRow`, the other over `Task` directly — and only differ in
+ * what they aggregate per bucket afterward (done/hasLate counts vs. none).
+ */
+function bucketByCategory<T>(
+  items: T[],
+  categoryOf: (item: T) => string | undefined,
+  orderOf: (item: T) => number,
+): CategoryBucket<T>[] {
+  const buckets = new Map<string, CategoryBucket<T>>();
   const ranks = new Map<string, number>();
 
-  for (const row of rows) {
-    const filed = row.task.category?.trim();
+  for (const item of items) {
+    const filed = categoryOf(item)?.trim();
     const key = filed || UNFILED_KEY;
     const bucket = buckets.get(key) ?? {
       key,
       label: filed || UNFILED_LABEL,
-      rows: [],
-      done: 0,
-      total: 0,
-      hasLate: false,
+      items: [],
     };
-    bucket.rows.push(row);
-    bucket.total += 1;
-    if (row.state === "approved") bucket.done += 1;
-    if (row.state === "late") bucket.hasLate = true;
+    bucket.items.push(item);
     buckets.set(key, bucket);
 
-    // Unfiled sorts after every real group whatever its tasks' order.
-    const rank = filed ? row.task.order : Number.POSITIVE_INFINITY;
+    // Unfiled sorts after every real group whatever its items' order.
+    const rank = filed ? orderOf(item) : Number.POSITIVE_INFINITY;
     ranks.set(key, Math.min(ranks.get(key) ?? Number.POSITIVE_INFINITY, rank));
   }
 
-  // Compared rather than subtracted: the unfiled group's rank is Infinity,
+  // Compared rather than subtracted: the unfiled bucket's rank is Infinity,
   // and Infinity - Infinity is NaN, which would make the sort order
-  // undefined the day a second sentinel group exists.
+  // undefined the day a second sentinel bucket exists.
   return [...buckets.entries()]
     .sort(([ka, a], [kb, b]) => {
       const ra = ranks.get(ka) ?? 0;
@@ -177,7 +192,54 @@ export function groupTodayRows(rows: TodayRow[]): TodayGroup[] {
       if (ra !== rb) return ra < rb ? -1 : 1;
       return a.label.localeCompare(b.label, "ja");
     })
-    .map(([, group]) => group);
+    .map(([, bucket]) => bucket);
+}
+
+export function groupTodayRows(rows: TodayRow[]): TodayGroup[] {
+  return bucketByCategory(
+    rows,
+    (row) => row.task.category,
+    (row) => row.task.order,
+  ).map((bucket) => {
+    const done = bucket.items.filter((row) => row.state === "approved").length;
+    const hasLate = bucket.items.some((row) => row.state === "late");
+    return {
+      key: bucket.key,
+      label: bucket.label,
+      rows: bucket.items,
+      done,
+      total: bucket.items.length,
+      hasLate,
+    };
+  });
+}
+
+export type TaskCategoryGroup = {
+  /** Stable identity, distinct from `label` — see `TodayGroup.key`. */
+  key: string;
+  /** The category name, or `UNFILED_LABEL`. */
+  label: string;
+  tasks: Task[];
+};
+
+/**
+ * Tasks bucketed by `category`, ordered the same way `groupTodayRows`
+ * orders its groups (smallest `task.order` first, `そのほか` pinned last).
+ *
+ * For やること管理: a parent could already see this shape by opening every
+ * task's editor one at a time to read its category back. Grouping the list
+ * itself is that same information, laid out instead of hidden behind a tap.
+ */
+export function groupTasksByCategory(tasks: Task[]): TaskCategoryGroup[] {
+  return bucketByCategory(
+    tasks,
+    (task) => task.category,
+    (task) => task.order,
+  ).map((bucket) => ({
+    key: bucket.key,
+    label: bucket.label,
+    tasks: bucket.items,
+  }));
 }
 
 /**
