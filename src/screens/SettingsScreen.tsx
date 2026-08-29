@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useAuth } from "../auth/context";
 import { useUid } from "../auth/context";
@@ -18,6 +19,7 @@ import {
 } from "../components/ui";
 import { deleteHousehold, updateHousehold } from "../data/households";
 import { useHousehold } from "../household/context";
+import { isAdminEmail } from "../lib/admin";
 import { payoutPlan } from "../lib/payout";
 import { useAction } from "./useAction";
 
@@ -30,7 +32,7 @@ import { useAction } from "./useAction";
  */
 export function SettingsScreen() {
   const uid = useUid();
-  const { signOutUser } = useAuth();
+  const { user, signOutUser } = useAuth();
   const { households, household, members, isParent, isOwner, select } =
     useHousehold();
 
@@ -125,6 +127,14 @@ export function SettingsScreen() {
             サインアウト
           </Button>
           {isOwner ? <DeleteHousehold id={household.id} name={household.name} /> : null}
+          {isAdminEmail(user?.email) ? (
+            <Link
+              to="/admin"
+              className="min-h-tap flex items-center justify-center rounded-card border border-rule text-sm text-muted"
+            >
+              かんりがめん
+            </Link>
+          ) : null}
         </div>
       </Card>
     </div>

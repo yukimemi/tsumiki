@@ -63,3 +63,12 @@ export async function markCommentsSeen(
     { merge: true },
   );
 }
+
+/** Records acceptance of docs/terms.md. See src/lib/terms.ts for the version. */
+export async function acceptTerms(uid: string, version: number): Promise<void> {
+  await setDoc(
+    doc(db(), COL, uid),
+    { termsAcceptedAt: serverTimestamp(), termsVersion: version },
+    { merge: true },
+  );
+}

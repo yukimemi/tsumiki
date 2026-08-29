@@ -2,11 +2,13 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AuthProvider } from "./auth/AuthProvider";
 import { RequireAuth } from "./auth/RequireAuth";
+import { TermsGate } from "./auth/TermsGate";
 import { AppShell } from "./components/AppShell";
 import { Spinner } from "./components/ui";
 import { EffectsProvider } from "./effects/EffectsProvider";
 import { HouseholdProvider } from "./household/HouseholdProvider";
 import { useHousehold } from "./household/context";
+import { AdminScreen } from "./screens/AdminScreen";
 import { CoinsScreen } from "./screens/CoinsScreen";
 import { FamilyScreen } from "./screens/FamilyScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
@@ -48,17 +50,36 @@ function HouseholdGate() {
   );
 }
 
+/**
+ * Cross-household, admin-only. Sits above the household gate: an admin
+ * without their own family must still reach it, and it has nothing to do
+ * with any one household's tabs. `AdminScreen` itself re-checks
+ * `isAdminEmail` and renders a lock screen for anyone else — this route is
+ * reachable by URL for a non-admin, only `firestore.rules` `isAdmin()`
+ * (and the UI's own check) keep the data out of reach.
+ */
+function AdminGate() {
+  return (
+    <Routes>
+      <Route path="/admin" element={<AdminScreen />} />
+      <Route path="*" element={<HouseholdGate />} />
+    </Routes>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <RequireAuth>
-        <HouseholdProvider>
-          <EffectsProvider>
-            <BrowserRouter>
-              <HouseholdGate />
-            </BrowserRouter>
-          </EffectsProvider>
-        </HouseholdProvider>
+        <TermsGate>
+          <HouseholdProvider>
+            <EffectsProvider>
+              <BrowserRouter>
+                <AdminGate />
+              </BrowserRouter>
+            </EffectsProvider>
+          </HouseholdProvider>
+        </TermsGate>
       </RequireAuth>
     </AuthProvider>
   );
