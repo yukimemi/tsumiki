@@ -646,11 +646,25 @@ things it left behind, both deliberate:
   data somewhere it belongs.
 
 Nothing in the rules limits *how often* a signed-in user may write, and
-nothing can — rules see one request at a time. App Check (reCAPTCHA v3,
-wired in `src/lib/firebase.ts`) is what covers that gap, and only for
-automated abuse: it cannot stop a person creating households by hand.
+nothing can — rules see one request at a time. App Check (reCAPTCHA
+Enterprise, wired in `src/lib/firebase.ts`) is what covers that gap, and
+only for automated abuse: it cannot stop a person creating households by
+hand.
 
-Two things about it that are easy to get wrong:
+**Enterprise, not the classic v3 provider.** The Firebase console marks
+classic reCAPTCHA deprecated and asks for a secret key; the current
+key-creation flow issues Cloud-managed Enterprise keys, which have no
+secret. `ReCaptchaV3Provider` is therefore not an option here however much
+the docs still mention it — the key simply cannot be obtained.
+
+**The token TTL is the cost dial.** Enterprise bills per assessment beyond
+10,000/month, and an assessment happens only when the App Check token is
+minted — so the TTL *is* the billing interval. It is set to 1 day in the
+console. At the console's 1-hour default a single device burns >700
+assessments a month and the free tier is gone at about a dozen devices.
+Shortening it is a billing decision, not just a security one.
+
+Two more things that are easy to get wrong:
 
 - **It initialises inside `ensureApp()`, not at the entry point.** App Check
   has to be started between `initializeApp()` and the first call into any

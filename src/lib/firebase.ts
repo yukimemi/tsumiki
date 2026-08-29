@@ -5,7 +5,10 @@
 // "settings missing" screen instead of throwing while modules evaluate.
 
 import { initializeApp, type FirebaseApp } from "firebase/app";
-import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
+import {
+  initializeAppCheck,
+  ReCaptchaEnterpriseProvider,
+} from "firebase/app-check";
 import {
   connectAuthEmulator,
   getAuth,
@@ -49,6 +52,11 @@ const STORAGE_PORT = 9199;
 // Absent key means "not configured": the app still works, it just sends no
 // attestation, which is served normally until enforcement is turned on in the
 // Firebase console (see README).
+//
+// reCAPTCHA *Enterprise*, not the classic v3 provider: the Firebase console
+// marks classic reCAPTCHA deprecated and asks for a secret key that the current
+// key-creation flow no longer issues — new keys are Cloud-managed Enterprise
+// keys, which authenticate with the site key alone.
 const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
 
 /**
@@ -91,7 +99,7 @@ function startAppCheck(instance: FirebaseApp): void {
 
   try {
     initializeAppCheck(instance, {
-      provider: new ReCaptchaV3Provider(appCheckSiteKey),
+      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
       isTokenAutoRefreshEnabled: true,
     });
   } catch (e) {
