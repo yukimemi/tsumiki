@@ -237,6 +237,14 @@ export type UserDoc = {
    * for you", and a map keyed by entry id would grow without a bound.
    */
   commentsSeenAt?: Record<string, Timestamp>;
+  /**
+   * Set by `acceptTerms` (src/data/users.ts) when the user accepts
+   * docs/terms.md. `termsVersion` is compared against
+   * `CURRENT_TERMS_VERSION` (src/lib/terms.ts) by `TermsGate` — a bump
+   * there sends every user, new or existing, back through TermsScreen.
+   */
+  termsAcceptedAt?: Timestamp;
+  termsVersion?: number;
 };
 
 /** Uniform shape returned by every live-subscription hook in `src/data`. */

@@ -328,6 +328,21 @@ pnpm exec tsx scripts/set-plan.ts <householdId> <free|pro>
 わけではない。実際にお金を払う人が現れたら、`tasks` の onCreate トリガーで実数を
 数えて超過分を打ち消す Cloud Function（`functions/billing-guard` の隣）に切り替える。
 
+## 管理画面（/admin）
+
+家族が増えたときの一覧確認用。`src/lib/admin.ts` のメールアドレス allowlist に載って
+いる本人だけが入れる（設定画面に「かんりがめん」リンクが出る）。`firestore.rules` の
+`isAdmin()` は `households` コレクションの read だけを広げていて、名前・プラン・
+やることの数・メンバー数・登録日しか見えない。`entries`（写真含む）や `comments` には
+一切アクセス権を渡していない — プライバシー上、個人の投稿内容は管理画面の対象外。
+
+管理者を増やすときは `src/lib/admin.ts` と `firestore.rules` の `isAdmin()` 両方を
+編集して `pnpm rules:deploy`。片方だけ直しても揃わない。
+
+なお、これはアプリの中の権限であって、Firebase コンソールや Admin SDK が使える
+GCP プロジェクトの IAM 権限そのものは塞げない。ルールが効くのはクライアント SDK
+経由のアクセスだけ。
+
 ## 開発メモ
 
 ```sh

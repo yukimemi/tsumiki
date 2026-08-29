@@ -25,6 +25,14 @@ service cloud.firestore {
       return request.auth.token.email.lower();
     }
 
+    // Hand-maintained allowlist, mirrored in src/lib/admin.ts. Grants read on
+    // `households` only — never entries, comments, ledger, or anything a
+    // member wrote. Adding a name means editing both lists and redeploying
+    // (pnpm rules:deploy).
+    function isAdmin() {
+      return isSignedIn() && userEmail() in ['yukimemi@gmail.com'];
+    }
+
     function hhExists(id) {
       return exists(/databases/$(database)/documents/households/$(id));
     }
@@ -148,9 +156,10 @@ service cloud.firestore {
     }
 
     match /households/{householdId} {
-      allow read: if isSignedIn()
-        && (request.auth.uid in resource.data.memberIds
-            || userEmail() in resource.data.get('invitedEmails', []));
+      allow read: if isAdmin()
+        || (isSignedIn()
+            && (request.auth.uid in resource.data.memberIds
+                || userEmail() in resource.data.get('invitedEmails', [])));
       // Creating a family is what signing up *is*, so the only gate is a
       // verified Google account. The shape checks keep a fresh household from
       // being born with members it did not invite: the creator is alone in it,

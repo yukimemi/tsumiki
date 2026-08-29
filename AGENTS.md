@@ -722,6 +722,7 @@ account at 100%.
 | Composite indexes | `firestore.indexes.json` — add one whenever a query gains an `orderBy` beside a `where` |
 | The fixed preview hostname | Firebase authorized domains (console) + the `vercel alias set` line under *Vercel previews and Firebase authorized domains* below |
 | `Household.plan` / `taskCount` | `src/types.ts`, `firestore.rules` (`isPro`, `isPlanImmutable`, `isTaskCountUpdate`), `storage.rules` (`isPro`), `src/data/tasks.ts`, `scripts/set-plan.ts`, `scripts/recalc-task-counts.ts` |
+| Admin email allowlist | `src/lib/admin.ts` (`isAdminEmail`) + `firestore.rules` (`isAdmin()`) — two hand-written lists, not one source; edit both and `pnpm rules:deploy` |
 | The free-plan task cap (`30`) | `firestore.rules` (`taskCount < 30` on `tasks` create), `src/components/TaskEditor.tsx` (`atCap`), `src/screens/SettingsScreen.tsx` (the "30こまで" copy) — no shared constant, so a future change to the number must touch all three |
 | Free-tier ad gating | `src/components/FreeTierAd.tsx` (`plan !== "pro"` check), `src/screens/SettingsScreen.tsx` (mounted only inside the `isParent` branch), `.env.example` (`VITE_ADSENSE_CLIENT` / `VITE_ADSENSE_SLOT`) — see #36 |
 
@@ -756,6 +757,46 @@ that only hold here, not anywhere the code says them explicitly:
   onCreate Cloud Function next to `functions/billing-guard`.
 - `taskCount` is a cache, like `balances`: rebuild it with
   `scripts/recalc-task-counts.ts` rather than trusting it as truth.
+
+### Admin (`/admin`)
+
+A hand-maintained email allowlist, not a role — it sits above every
+household, unlike `owner`/`parent`/`child` which are all scoped to one.
+`src/lib/admin.ts`'s `isAdminEmail` and `firestore.rules`' `isAdmin()` are
+two separate lists that must be kept in step by hand (rules cannot import
+TypeScript); adding a name means editing both and running `pnpm
+rules:deploy`.
+
+`isAdmin()` only widens the `households` `allow read` rule — nothing else.
+`AdminScreen` (`/admin`, linked from `SettingsScreen` only for an admin
+email) lists what that document holds: name, plan, task count, member count,
+created date. It deliberately cannot reach `entries`, `comments`, or
+anything else a member wrote — extending admin to another collection means
+adding `isAdmin()` to that collection's own rule, a decision to make
+explicitly each time, not something that falls out of the household grant.
+
+This does not, and cannot, restrict whoever holds IAM access to the
+underlying GCP project — the Firebase/Firestore console and the Admin SDK
+both bypass `firestore.rules` entirely. The allowlist governs the app's own
+client-facing surface, not infrastructure access.
+
+### Terms of service (`TermsGate`)
+
+`docs/terms.md` is the source text, rendered by `src/screens/TermsScreen.tsx`
+via a tiny hand-rolled parser (`##` headings, `- ` bullets, blank-line
+paragraphs) — not a markdown library, since the document never needs
+anything past that shape. `src/auth/TermsGate.tsx` sits between
+`RequireAuth` and `HouseholdProvider`: it blocks *every* signed-in user,
+new or returning, until `UserDoc.termsVersion` (`src/data/users.ts`
+`acceptTerms`) matches `CURRENT_TERMS_VERSION` (`src/lib/terms.ts`).
+
+**Bumping `CURRENT_TERMS_VERSION` re-blocks every existing user on their
+next load**, not just new sign-ups — that is the whole mechanism for asking
+an existing family to re-consent after a substantive change. Bump it only
+when `docs/terms.md` changes in a way that needs fresh consent, not for a
+wording fix. The gate is account-level, not household-level, so it renders
+before `HouseholdProvider` and works for an admin or a brand-new user who
+has no household yet.
 
 ### Design language
 
