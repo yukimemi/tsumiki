@@ -723,6 +723,7 @@ account at 100%.
 | The fixed preview hostname | Firebase authorized domains (console) + the `vercel alias set` line under *Vercel previews and Firebase authorized domains* below |
 | `Household.plan` / `taskCount` | `src/types.ts`, `firestore.rules` (`isPro`, `isPlanImmutable`, `isTaskCountUpdate`), `storage.rules` (`isPro`), `src/data/tasks.ts`, `scripts/set-plan.ts`, `scripts/recalc-task-counts.ts` |
 | The free-plan task cap (`30`) | `firestore.rules` (`taskCount < 30` on `tasks` create), `src/components/TaskEditor.tsx` (`atCap`), `src/screens/SettingsScreen.tsx` (the "30こまで" copy) — no shared constant, so a future change to the number must touch all three |
+| Free-tier ad gating | `src/components/FreeTierAd.tsx` (`plan !== "pro"` check), `src/screens/SettingsScreen.tsx` (mounted only inside the `isParent` branch), `.env.example` (`VITE_ADSENSE_CLIENT` / `VITE_ADSENSE_SLOT`) — see #36 |
 
 ### Coins
 
