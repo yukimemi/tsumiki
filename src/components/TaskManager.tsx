@@ -8,9 +8,9 @@ import {
   useAllTasks,
 } from "../data/tasks";
 import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
+import { categoriesOf, groupTasksByCategory } from "../screens/today";
 import { useAction } from "../screens/useAction";
 import type { MemberInfo, Role, Task } from "../types";
-import { categoriesOf } from "../screens/today";
 import { TaskEditor } from "./TaskEditor";
 import {
   Badge,
@@ -52,9 +52,16 @@ export function TaskManager(props: {
   const archived = all.filter((task) => task.archived);
 
   /**
-   * Swap two rows inside the visible list, then send every id in its new
-   * order: positions are rewritten from scratch, so archived rows have to
-   * travel along or they would collide with the rewritten numbers.
+   * Swap two rows inside `list`, then send every id in its new order:
+   * positions are rewritten from scratch, so rows outside `list` (other
+   * groups, archived rows) have to travel along too or they would collide
+   * with the rewritten numbers.
+   *
+   * `list` is always a single category's group, not the flat active/archived
+   * array — swapping across a category boundary would shuffle `order`
+   * without touching either task's category, so the group a swapped task
+   * renders under would not change and the button would look like it did
+   * nothing.
    */
   const swap = (list: Task[], index: number, delta: number) => {
     const other = list[index + delta];
@@ -194,8 +201,18 @@ export function TaskManager(props: {
       ) : (
         <>
           {active.length > 0 ? (
-            <div className="space-y-2">
-              {active.map((task, index) => row(task, active, index))}
+            <div className="space-y-4">
+              {groupTasksByCategory(active).map((group) => (
+                <div key={group.key} className="space-y-2">
+                  <h3 className="flex items-center gap-2 text-sm font-bold text-muted">
+                    {group.label}
+                    <Badge>{group.tasks.length}</Badge>
+                  </h3>
+                  {group.tasks.map((task, index) =>
+                    row(task, group.tasks, index),
+                  )}
+                </div>
+              ))}
             </div>
           ) : (
             <p className="text-sm text-muted">
@@ -217,9 +234,20 @@ export function TaskManager(props: {
                   {showArchived ? "▲" : "▼"}
                 </span>
               </button>
-              {showArchived
-                ? archived.map((task, index) => row(task, archived, index))
-                : null}
+              {showArchived ? (
+                <div className="space-y-4">
+                  {groupTasksByCategory(archived).map((group) => (
+                    <div key={group.key} className="space-y-2">
+                      <h4 className="text-sm font-bold text-muted">
+                        {group.label}
+                      </h4>
+                      {group.tasks.map((task, index) =>
+                        row(task, group.tasks, index),
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </>
