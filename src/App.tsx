@@ -8,6 +8,7 @@ import { Spinner } from "./components/ui";
 import { EffectsProvider } from "./effects/EffectsProvider";
 import { HouseholdProvider } from "./household/HouseholdProvider";
 import { useHousehold } from "./household/context";
+import { AboutScreen } from "./screens/AboutScreen";
 import { AdminScreen } from "./screens/AdminScreen";
 import { CoinsScreen } from "./screens/CoinsScreen";
 import { FamilyScreen } from "./screens/FamilyScreen";
@@ -67,20 +68,35 @@ function AdminGate() {
   );
 }
 
-export default function App() {
+/**
+ * Everything that needs a signed-in user, mounted only once the router has
+ * ruled out the public `/about` route. `AuthProvider` lives here rather than
+ * at the top so a signed-out visitor on `/about` — including a crawler —
+ * never touches Firebase at all.
+ */
+function AuthedApp() {
   return (
     <AuthProvider>
       <RequireAuth>
         <TermsGate>
           <HouseholdProvider>
             <EffectsProvider>
-              <BrowserRouter>
-                <AdminGate />
-              </BrowserRouter>
+              <AdminGate />
             </EffectsProvider>
           </HouseholdProvider>
         </TermsGate>
       </RequireAuth>
     </AuthProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/about" element={<AboutScreen />} />
+        <Route path="/*" element={<AuthedApp />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
