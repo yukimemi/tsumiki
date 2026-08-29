@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useLayoutEffect } from "react";
 import type {
   ComponentPropsWithRef,
   CSSProperties,
@@ -174,6 +174,16 @@ export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
+  // `onClose` is an inline closure at almost every call site, so a fresh
+  // reference lands on every render of the screen that owns `open` — e.g.
+  // typing into a field inside the sheet re-renders the parent. Reading it
+  // through a ref keeps the effect below keyed on `open` alone, so it does
+  // not tear down and steal focus back to the panel on each keystroke.
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!open) return;
 
@@ -185,7 +195,7 @@ export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -226,7 +236,7 @@ export function Sheet({ open, onClose, title, children, footer }: SheetProps) {
       body.style.overflow = restoreOverflow;
       if (opener instanceof HTMLElement) opener.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
