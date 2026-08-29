@@ -61,11 +61,16 @@ const MONTH_DAYS: readonly number[] = Array.from(
   (_, index) => index + 1,
 );
 
-const REPEAT_OPTIONS: readonly SegmentedOption<RepeatType>[] = [
-  { value: "once", label: "1かいだけ" },
+/** きまった ペースの もの。 */
+const REPEAT_CADENCE_OPTIONS: readonly SegmentedOption<RepeatType>[] = [
   { value: "daily", label: "まいにち" },
   { value: "weekly", label: "まいしゅう" },
   { value: "monthly", label: "まいつき" },
+];
+
+/** 1回だけ、または期間内なら何日にやってもいい残り。 */
+const REPEAT_OTHER_OPTIONS: readonly SegmentedOption<RepeatType>[] = [
+  { value: "once", label: "1かいだけ" },
   { value: "weeklyCount", label: "しゅうに○かい" },
   { value: "monthlyCount", label: "つきに○かい" },
 ];
@@ -556,13 +561,30 @@ function TaskForm(props: {
         name="repeatType"
         render={({ field }) => (
           <Field label="くりかえし" group>
-            <SegmentedControl
-              value={field.value}
-              options={REPEAT_OPTIONS}
-              onChange={field.onChange}
-              label="くりかえし"
-              className="w-full"
-            />
+            {/* Six options no longer fit one non-scrolling row (the
+                original four did). Splitting into "きまった ペース"
+                (daily/weekly/monthly — a fixed day) and the rest
+                (once, and the two period-quota types — any day, just a
+                count) keeps each row at three pills, and the split reads
+                as a real distinction rather than an arbitrary line break. */}
+            <div className="space-y-1" role="group" aria-label="くりかえし">
+              <SegmentedControl
+                value={field.value}
+                options={REPEAT_CADENCE_OPTIONS}
+                onChange={field.onChange}
+                label="くりかえし（きまった ペース）"
+                name="repeat-cadence"
+                className="w-full"
+              />
+              <SegmentedControl
+                value={field.value}
+                options={REPEAT_OTHER_OPTIONS}
+                onChange={field.onChange}
+                label="くりかえし（そのほか）"
+                name="repeat-other"
+                className="w-full"
+              />
+            </div>
           </Field>
         )}
       />
