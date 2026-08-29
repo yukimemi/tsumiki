@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { Entry, EntryStatus, RepeatRule, Task } from "../types";
 import {
   UNFILED_LABEL,
+  canMoveCategoryGroup,
   categoriesOf,
   groupTasksByCategory,
   groupTodayRows,
+  moveCategoryGroup,
   progressOf,
   todayRowsFor,
 } from "./today";
@@ -418,6 +420,84 @@ describe("groupTasksByCategory", () => {
 
   it("returns nothing for no tasks", () => {
     expect(groupTasksByCategory([])).toEqual([]);
+  });
+});
+
+/**
+ * `order` is rewritten from a task list by index, the way `reorderTasks`
+ * does it, so a test can assert on what the screen would show next rather
+ * than on the id array itself.
+ */
+function applyOrder(tasks: Task[], ids: string[]): Task[] {
+  return tasks.map((t) => ({ ...t, order: ids.indexOf(t.id) }));
+}
+
+describe("moveCategoryGroup", () => {
+  const tasks = [
+    task({ id: "a1", order: 0, category: "あさ" }),
+    task({ id: "a2", order: 1, category: "あさ" }),
+    task({ id: "b1", order: 2, category: "よる" }),
+    task({ id: "c1", order: 3, category: "そうじ" }),
+  ];
+
+  it("moves a whole group past the next one, tasks and all", () => {
+    const groups = groupTasksByCategory(tasks);
+    const ids = moveCategoryGroup(tasks, groups, 0, 1);
+    expect(ids).not.toBeNull();
+    expect(
+      groupTasksByCategory(applyOrder(tasks, ids!)).map((g) => g.label),
+    ).toEqual(["よる", "あさ", "そうじ"]);
+  });
+
+  it("keeps the order inside each moved group", () => {
+    const groups = groupTasksByCategory(tasks);
+    const ids = moveCategoryGroup(tasks, groups, 1, -1)!;
+    const moved = groupTasksByCategory(applyOrder(tasks, ids));
+    expect(moved.map((g) => g.label)).toEqual(["よる", "あさ", "そうじ"]);
+    expect(moved[1].tasks.map((t) => t.id)).toEqual(["a1", "a2"]);
+  });
+
+  it("rewrites every id, so nothing outside the moved groups collides", () => {
+    const archived = task({ id: "z", order: 4, archived: true });
+    const all = [...tasks, archived];
+    const active = all.filter((t) => !t.archived);
+    const ids = moveCategoryGroup(all, groupTasksByCategory(active), 0, 1)!;
+    expect([...ids].sort()).toEqual(all.map((t) => t.id).sort());
+    // The archived row keeps its own slot: moving an active group must not
+    // shuffle the list it is not part of.
+    expect(ids.indexOf("z")).toBe(4);
+  });
+
+  it("refuses a move that would touch the unfiled group, which is pinned last", () => {
+    const withUnfiled = [
+      task({ id: "a1", order: 0, category: "あさ" }),
+      task({ id: "u1", order: 1 }),
+    ];
+    const groups = groupTasksByCategory(withUnfiled);
+    expect(groups.map((g) => g.label)).toEqual(["あさ", UNFILED_LABEL]);
+    expect(moveCategoryGroup(withUnfiled, groups, 0, 1)).toBeNull();
+    expect(moveCategoryGroup(withUnfiled, groups, 1, -1)).toBeNull();
+  });
+
+  it("refuses a move off either end", () => {
+    const groups = groupTasksByCategory(tasks);
+    expect(moveCategoryGroup(tasks, groups, 0, -1)).toBeNull();
+    expect(moveCategoryGroup(tasks, groups, 2, 1)).toBeNull();
+  });
+});
+
+describe("canMoveCategoryGroup", () => {
+  it("answers the same question the move does, without doing it", () => {
+    const tasks = [
+      task({ id: "a1", order: 0, category: "あさ" }),
+      task({ id: "b1", order: 1, category: "よる" }),
+      task({ id: "u1", order: 2 }),
+    ];
+    const groups = groupTasksByCategory(tasks);
+    expect(canMoveCategoryGroup(groups, 0, -1)).toBe(false);
+    expect(canMoveCategoryGroup(groups, 0, 1)).toBe(true);
+    expect(canMoveCategoryGroup(groups, 1, 1)).toBe(false);
+    expect(canMoveCategoryGroup(groups, 2, -1)).toBe(false);
   });
 });
 

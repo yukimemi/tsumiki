@@ -8,7 +8,13 @@ import {
   useAllTasks,
 } from "../data/tasks";
 import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
-import { categoriesOf, groupTasksByCategory } from "../screens/today";
+import {
+  canMoveCategoryGroup,
+  categoriesOf,
+  groupTasksByCategory,
+  moveCategoryGroup,
+  type TaskCategoryGroup,
+} from "../screens/today";
 import { useAction } from "../screens/useAction";
 import type { MemberInfo, Role, Task } from "../types";
 import { TaskEditor } from "./TaskEditor";
@@ -27,6 +33,11 @@ import {
  * The parent's list of chores: what exists, in what order, and what is put
  * away. Order is moved with ↑ / ↓ buttons rather than drag and drop — a drag
  * on a phone fights the page scroll, and a thumb finds a button every time.
+ *
+ * There are two of those pairs, on the row and on the group header, because
+ * they move different things: a row's buttons swap it with its neighbour
+ * inside its own group, and a group's move the whole block past the next one.
+ * Neither can stand in for the other — see `moveCategoryGroup`.
  */
 
 type Member = { uid: string; role: Role; info: MemberInfo };
@@ -50,6 +61,8 @@ export function TaskManager(props: {
   const all = tasks.data;
   const active = all.filter((task) => !task.archived);
   const archived = all.filter((task) => task.archived);
+  const activeGroups = groupTasksByCategory(active);
+  const archivedGroups = groupTasksByCategory(archived);
 
   /**
    * Swap two rows inside `list`, then send every id in its new order:
@@ -77,6 +90,17 @@ export function TaskManager(props: {
     void action.run(() => reorderTasks(ids));
   };
 
+  /** Move a whole category past its neighbour, header buttons only. */
+  const moveGroup = (
+    groups: TaskCategoryGroup[],
+    index: number,
+    delta: number,
+  ) => {
+    const ids = moveCategoryGroup(all, groups, index, delta);
+    if (!ids) return;
+    void action.run(() => reorderTasks(ids));
+  };
+
   const setArchived = (task: Task, archivedNext: boolean) => {
     void action.run(() => setTaskArchived(task.id, archivedNext));
   };
@@ -93,6 +117,33 @@ export function TaskManager(props: {
       あたらしく つくる
     </Button>
   );
+
+  const groupMove = (groups: TaskCategoryGroup[], index: number) => {
+    const up = canMoveCategoryGroup(groups, index, -1);
+    const down = canMoveCategoryGroup(groups, index, 1);
+    // 「そのほか」 never moves, and a lone group has nowhere to go: no buttons
+    // at all reads better than a pair that is always grey.
+    if (!up && !down) return null;
+    const { label } = groups[index];
+    return (
+      <span className="ml-auto flex flex-none gap-1">
+        <IconButton
+          label={`${label} の グループを うえに うごかす`}
+          disabled={action.busy || !up}
+          onClick={() => moveGroup(groups, index, -1)}
+        >
+          ↑
+        </IconButton>
+        <IconButton
+          label={`${label} の グループを したに うごかす`}
+          disabled={action.busy || !down}
+          onClick={() => moveGroup(groups, index, 1)}
+        >
+          ↓
+        </IconButton>
+      </span>
+    );
+  };
 
   const row = (task: Task, list: Task[], index: number) => (
     <Card key={task.id} className="space-y-2">
@@ -202,12 +253,15 @@ export function TaskManager(props: {
         <>
           {active.length > 0 ? (
             <div className="space-y-4">
-              {groupTasksByCategory(active).map((group) => (
+              {activeGroups.map((group, groupIndex) => (
                 <div key={group.key} className="space-y-2">
-                  <h3 className="flex items-center gap-2 text-sm font-bold text-muted">
-                    {group.label}
-                    <Badge>{group.tasks.length}</Badge>
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="flex min-w-0 items-center gap-2 text-sm font-bold text-muted">
+                      <span className="truncate">{group.label}</span>
+                      <Badge>{group.tasks.length}</Badge>
+                    </h3>
+                    {groupMove(activeGroups, groupIndex)}
+                  </div>
                   {group.tasks.map((task, index) =>
                     row(task, group.tasks, index),
                   )}
@@ -236,11 +290,14 @@ export function TaskManager(props: {
               </button>
               {showArchived ? (
                 <div className="space-y-4">
-                  {groupTasksByCategory(archived).map((group) => (
+                  {archivedGroups.map((group, groupIndex) => (
                     <div key={group.key} className="space-y-2">
-                      <h4 className="text-sm font-bold text-muted">
-                        {group.label}
-                      </h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="min-w-0 truncate text-sm font-bold text-muted">
+                          {group.label}
+                        </h4>
+                        {groupMove(archivedGroups, groupIndex)}
+                      </div>
                       {group.tasks.map((task, index) =>
                         row(task, group.tasks, index),
                       )}
