@@ -10,7 +10,6 @@ import {
   deleteDoc,
   deleteField,
   doc,
-  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -23,7 +22,6 @@ import { db } from "../lib/firebase";
 import type { Household, Live, MemberInfo, Role } from "../types";
 import { useLiveDocs } from "./live";
 import { clean, forMerge, forWrite } from "./sanitise";
-import { addAccessGrant, removeAccessGrant, revokeAllGrantsForHousehold } from "./invites";
 
 const COL = "households";
 
@@ -74,9 +72,6 @@ export async function createHousehold(
       coinYen: DEFAULT_COIN_YEN,
     }),
   );
-  // The creator needs a grant too, otherwise deleting a household they were
-  // invited to would revoke the access they still need for this one.
-  if (user.email) await addAccessGrant(user.email, ref.id);
   return ref.id;
 }
 
@@ -115,17 +110,12 @@ export async function updateMemberInfo(
 }
 
 export async function removeMember(id: string, uid: string): Promise<void> {
-  const ref = doc(db(), COL, id);
-  // Read the email before it goes: it is the key the access grant is filed under.
-  const snap = await getDoc(ref);
-  const email = (snap.data() as Omit<Household, "id"> | undefined)?.memberInfo?.[uid]?.email;
-  await updateDoc(ref, {
+  await updateDoc(doc(db(), COL, id), {
     memberIds: arrayRemove(uid),
     [`memberRoles.${uid}`]: deleteField(),
     [`memberInfo.${uid}`]: deleteField(),
     updatedAt: serverTimestamp(),
   });
-  if (email) await removeAccessGrant(email, id);
 }
 
 /**
@@ -156,6 +146,5 @@ export async function deleteHousehold(id: string): Promise<void> {
   }
   if (pending > 0) await batch.commit();
 
-  await revokeAllGrantsForHousehold(id);
   await deleteDoc(doc(firestore, COL, id));
 }

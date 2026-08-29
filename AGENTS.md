@@ -624,6 +624,31 @@ rule reads `resource.data.householdId`, so every thread failed with
 `where("householdId","==",householdId)`. Any new flat collection query needs the
 same treatment.
 
+### Signup is self-serve; there is no allowlist
+
+Any verified Google account may create a household, and that *is* the signup
+step. The household document is the only membership boundary — every rule for
+every collection resolves to one `get()` of it, so a signed-in stranger reaches
+nothing until they create a family or claim an invite.
+
+There used to be a second gate: `config/access.allowedEmails` (plus
+`config/accessGrants`, its reverse index) had to list an address before any
+write was allowed, and the first user was seeded by hand. It is gone. Two
+things it left behind, both deliberate:
+
+- `match /config/{document=**}` denies everything rather than being deleted.
+  Documents from that era are still in production and must not become readable
+  if someone later adds a permissive `config` rule.
+- `users/{uid}` is readable **only by its owner**. Nothing reads anyone else's
+  (member lists come from the denormalised `Household.memberInfo`), and with
+  open signup a `isSignedIn()` read rule there would hand every address in the
+  database to anyone who makes an account. Do not loosen it without moving that
+  data somewhere it belongs.
+
+Not yet in place, and worth knowing before the user base is anything but
+family: nothing rate-limits household creation. App Check is the intended
+answer.
+
 ### Cross-file invariants
 
 | Invariant | Lives in |

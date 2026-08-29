@@ -3,8 +3,12 @@
 // both the creation and the refresh. Everything else that needs a name or an
 // avatar reads it from `Household.memberInfo`, which is denormalised on
 // purpose — a member list must not fan out into one read per member.
+//
+// Nothing reads anyone else's document, which is what lets the rules restrict
+// this collection to its owner. Keep it that way: with open signup, a readable
+// `users` collection is every address in the database.
 
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "../lib/firebase";
 import type { Live, UserDoc } from "../types";
@@ -23,12 +27,6 @@ export async function syncUserDoc(user: User): Promise<void> {
     }),
     { merge: true },
   );
-}
-
-export async function fetchUserDoc(uid: string): Promise<UserDoc | null> {
-  const snap = await getDoc(doc(db(), COL, uid));
-  if (!snap.exists()) return null;
-  return { ...(snap.data() as Omit<UserDoc, "id">), id: snap.id };
 }
 
 /**
