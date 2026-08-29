@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAuth } from "../auth/context";
 import { useUid } from "../auth/context";
 import { AppearanceSettings } from "../components/AppearanceSettings";
+import { FreeTierAd } from "../components/FreeTierAd";
 import { InviteForm } from "../components/InviteForm";
 import { MemberIdentity } from "../components/MemberIdentity";
 import { MemberSettings } from "../components/MemberSettings";
@@ -94,6 +95,8 @@ export function SettingsScreen() {
           </div>
         ) : null}
       </Card>
+
+      {isParent ? <FreeTierAd plan={household.plan ?? "free"} /> : null}
 
       <Card>
         <h2 className="mb-3 text-base font-bold text-ink">やること</h2>
