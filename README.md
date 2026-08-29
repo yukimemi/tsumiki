@@ -120,6 +120,98 @@ reCAPTCHA がそのまま通る。
 - **`scripts/*`。** どちらも gcloud のアクセストークンで Firestore REST を叩くので、
   ルールも App Check も通らない。適用を有効にしても壊れない。
 
+## 課金の守り
+
+Firebase の Blaze プランに標準の上限は無い。公開したアプリで、気づかないうちに
+請求が膨らむ経路は 3 つある — reCAPTCHA のアセスメント、Firestore の読み書き、
+Storage の転送量。守りも 3 段で、外側ほど静かに、内側ほど乱暴に効く。
+
+| 段 | しくみ | 設定値 |
+| --- | --- | --- |
+| 1. 気づく | 請求予算アラート（メール + Pub/Sub） | 月 ¥1,000 の 50% / 90% / 100% |
+| 2. 頭打ちにする | reCAPTCHA Enterprise の 1 日あたり割り当て | 300 アセスメント / 日 |
+| 3. 止める | 予算超過で請求先アカウントを外す Cloud Function | 100% で発火 |
+
+**2 段目が効くのは reCAPTCHA の課金だけ**で、そのぶん確実に効く。1 日 300 は
+月 9,000 で、無料枠 10,000 の内側に収まる（トークン TTL が 1 日なので、
+おおよそ 300 端末 / 日にあたる）。上限に達するとトークンの発行が止まるので、
+適用を有効にしている状態では正規の利用者も入れなくなる — 攻撃者に枠を焼かせる
+DoS が成立する、ということでもある。狭めるときはそれを承知で。
+
+**3 段目は最後の手段で、発動するとアプリは止まる。** かぞくのアプリなので、
+止まるほうが青天井の請求より良い、という判断でそうしてある。実装は
+[`functions/billing-guard`](functions/billing-guard/)。
+
+### 止まったあとの戻しかた
+
+原因を先に潰すこと。漏れたままつなぎ直しても、メーターが回り直すだけ。
+
+```sh
+gcloud billing projects link tsumiki-app-23086 --billing-account=<ACCOUNT_ID>
+```
+
+### billing-guard のデプロイ
+
+ソースはリポジトリにあるが、デプロイは手で打つ。年に一度触るかどうかのものに
+CI を用意しても、腐るだけなので。
+
+**配信経路の IAM を先に入れること。** これが無いとデプロイは成功するのに
+メッセージが 1 通も届かない — 関数は存在するのに動かない、いちばん質の悪い壊れ方を
+する。`gcloud functions deploy` は 3 つのうち 1 つを警告として出すが、止まりはしない。
+
+```sh
+# Pub/Sub が push 用の OIDC トークンを作れるようにする
+gcloud projects add-iam-policy-binding tsumiki-app-23086 \
+  --member="serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-pubsub.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountTokenCreator" --condition=None
+
+# Eventarc が関数を呼べるようにする（Cloud Run サービスの IAM は既定で空）
+gcloud run services add-iam-policy-binding billing-guard \
+  --region=asia-northeast1 --project=tsumiki-app-23086 \
+  --member="serviceAccount:billing-guard@tsumiki-app-23086.iam.gserviceaccount.com" \
+  --role="roles/run.invoker"
+
+gcloud projects add-iam-policy-binding tsumiki-app-23086 \
+  --member="serviceAccount:billing-guard@tsumiki-app-23086.iam.gserviceaccount.com" \
+  --role="roles/eventarc.eventReceiver" --condition=None
+```
+
+そのうえでデプロイする:
+
+```sh
+gcloud functions deploy billing-guard --gen2 \
+  --runtime=nodejs22 --region=asia-northeast1 \
+  --source=functions/billing-guard --entry-point=stopBilling \
+  --trigger-topic=billing-alerts \
+  --service-account=billing-guard@tsumiki-app-23086.iam.gserviceaccount.com \
+  --set-env-vars=TARGET_PROJECT_ID=tsumiki-app-23086 \
+  --project=tsumiki-app-23086
+```
+
+### デプロイしたら必ず撃つ
+
+止める側の経路は本番を落とさずには試せない。試せるのは「予算未満なら何もしない」
+ほうだけで、それでも**メッセージが届いているか**は分かる。そこが壊れる場所なので、
+毎回やること。
+
+```sh
+gcloud pubsub topics publish billing-alerts --project=tsumiki-app-23086 \
+  --message='{"budgetDisplayName":"test","costAmount":12.0,"budgetAmount":1000.0,"currencyCode":"JPY"}'
+
+gcloud logging read 'resource.labels.service_name="billing-guard"' \
+  --project=tsumiki-app-23086 --limit=5 --freshness=5m \
+  --format="value(timestamp, textPayload)"
+```
+
+`[billing-guard] 12/1000 JPY — under budget` が出れば、予算 → Pub/Sub →
+Eventarc → Cloud Run → 関数の判断、までひととおり通っている。何も出なければ
+届いていない。上の IAM を疑うこと。
+
+サービスアカウント `billing-guard` に付いているのは、プロジェクトに対する
+`roles/billing.projectManager` だけ。よくある手順書は請求先アカウント全体に
+`roles/billing.admin` を付けるが、それだと他のプロジェクトまで触れてしまう。
+外すのに必要なのは前者で足りる。
+
 ## エミュレータで動かす
 
 Java が要る（`scoop install temurin-lts-jre` など）。

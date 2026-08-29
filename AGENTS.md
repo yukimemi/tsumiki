@@ -664,6 +664,39 @@ Two things about it that are easy to get wrong:
 `scripts/*` are unaffected either way: they use the Firestore REST API with a
 gcloud token, which bypasses rules and App Check both.
 
+### Billing has three guards, and the innermost one takes the app down
+
+Blaze has no built-in ceiling, so the guards are explicit. Outermost is a
+¥1,000/month budget with 50/90/100% alerts; then a 300/day cap on
+reCAPTCHA `CreateAssessmentRequests`; then `functions/billing-guard`, a
+Cloud Function on the budget's Pub/Sub topic that unlinks the billing
+account at 100%.
+
+- **The quota cap is also a DoS surface.** Burn the day's 300 assessments
+  and, with App Check enforced, nobody can mint a token — legitimate users
+  included. It is set where it is because 300/day keeps the month inside
+  reCAPTCHA's free 10,000; raising it trades billing exposure for
+  availability, and both directions are real.
+- **billing-guard is deployed by hand**, from the command in README. There
+  is no CI for it on purpose: a pipeline for something touched once a year
+  rots unnoticed, and this is the piece that must work the one time it runs.
+- **Its service account holds `roles/billing.projectManager` on the
+  project, not `roles/billing.admin` on the billing account.** Most guides
+  grant the latter; it would let this function detach billing from every
+  other project too. Unlinking needs only the former.
+- **The destructive path is untested by design** — testing it means taking
+  production down. What is exercised is the quiet path (cost < budget).
+- **A successful deploy does not mean a working trigger.** Three IAM
+  bindings sit on the delivery path (Pub/Sub's service agent needs
+  `roles/iam.serviceAccountTokenCreator`; the runtime SA needs
+  `roles/run.invoker` on the Cloud Run service, whose policy starts empty,
+  and `roles/eventarc.eventReceiver` on the project). Without them the
+  deploy still reports ACTIVE and every message is silently dropped —
+  `gcloud functions deploy` warns about exactly one of the three and exits
+  0. This is how the first deploy here shipped a kill switch that could
+  never fire. Always publish a test notification and read the logs after
+  deploying; the commands are in README.
+
 ### Cross-file invariants
 
 | Invariant | Lives in |
