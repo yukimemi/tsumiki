@@ -5,6 +5,7 @@
 // "settings missing" screen instead of throwing while modules evaluate.
 
 import { initializeApp, type FirebaseApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import {
   connectAuthEmulator,
   getAuth,
@@ -42,6 +43,65 @@ const FIRESTORE_PORT = 8085;
 const AUTH_PORT = 9099;
 const STORAGE_PORT = 9199;
 
+// App Check attests that a request came from this app running in a real
+// browser. Signup is open, so the rules can say who may write but not how
+// often — this is what keeps a script from creating households in a loop.
+// Absent key means "not configured": the app still works, it just sends no
+// attestation, which is served normally until enforcement is turned on in the
+// Firebase console (see README).
+const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
+
+/**
+ * Runs between initializeApp() and the first call into any Firebase service.
+ * That ordering is the whole reason this lives inside `ensureApp()` rather
+ * than at the entry point: every service getter below is lazy, so `ensureApp()`
+ * is the one moment guaranteed to come first.
+ *
+ * Skipped against the emulators, which do not verify tokens and cannot serve
+ * reCAPTCHA from 127.0.0.1 anyway.
+ */
+function startAppCheck(instance: FirebaseApp): void {
+  if (!appCheckSiteKey || useEmulator) return;
+
+  // Developing against the *real* project, opt-in in three states:
+  //
+  //   unset      real reCAPTCHA, which works from localhost as long as the
+  //              site key lists it. The default, deliberately — a debug token
+  //              nobody registered attests less than a real challenge does.
+  //   "true"     ask the SDK to mint a debug token, persist it and log it.
+  //              That logged value is the bootstrap: register it in the App
+  //              Check console, then paste it back here.
+  //   "<token>"  use that token.
+  //
+  // The SDK enables debug mode only for a boolean `true` or a string
+  // (`initializeDebugMode`), which is why "true" has to be converted rather
+  // than passed through as text — as text it would be read as a token whose
+  // value is literally "true".
+  //
+  // Guarded on DEV so none of this can be inlined into a production bundle,
+  // where a debug token would be a published bypass of the thing App Check
+  // exists to enforce.
+  if (import.meta.env.DEV) {
+    const debug = import.meta.env.VITE_FIREBASE_APPCHECK_DEBUG_TOKEN;
+    if (debug) {
+      (self as unknown as Record<string, unknown>).FIREBASE_APPCHECK_DEBUG_TOKEN =
+        debug === "true" ? true : debug;
+    }
+  }
+
+  try {
+    initializeAppCheck(instance, {
+      provider: new ReCaptchaV3Provider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (e) {
+    // A bad site key must not white-screen the app. With enforcement on the
+    // requests fail either way, and they show up as unverified traffic in the
+    // App Check console — which is where you would go looking.
+    console.warn("[app-check] initialisation failed", e);
+  }
+}
+
 let app: FirebaseApp | undefined;
 let authInstance: Auth | undefined;
 let dbInstance: Firestore | undefined;
@@ -53,7 +113,10 @@ function ensureApp(): FirebaseApp {
       "Firebase の設定が見つかりません。.env に VITE_FIREBASE_* を設定してください",
     );
   }
-  app ??= initializeApp(config);
+  if (!app) {
+    app = initializeApp(config);
+    startAppCheck(app);
+  }
   return app;
 }
 

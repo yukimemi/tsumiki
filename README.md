@@ -79,6 +79,47 @@ gcloud projects add-iam-policy-binding <PROJECT_ID> \
   --role=roles/firebaserules.firestoreServiceAgent
 ```
 
+## App Check（自動化された乱用よけ）
+
+サインアップが誰にでも開いているので、ルールだけでは足りない。ルールが決められるのは
+「誰が書いてよいか」で、「どれだけ書いてよいか」ではないから。App Check は
+reCAPTCHA v3 で「本物のブラウザで動いている、このアプリからのリクエストか」を確かめ、
+スクリプトが家族を作りつづけるような使われかたを止める。
+
+1. reCAPTCHA v3 のサイトキーを作る。許可ドメインに本番のホスト名、
+   `tsumiki-preview.vercel.app`（固定プレビュー）、`localhost` を入れる。
+2. Firebase コンソール → App Check → Web アプリに、そのサイトキーを登録する。
+3. `VITE_FIREBASE_APPCHECK_SITE_KEY` を `.env` と Vercel の環境変数の両方に入れる。
+   サイトキーは公開前提の値で、守っているのは秘密性ではなくドメインの束縛。
+4. **しばらくは「適用しない」のままにする。** App Check の画面で、検証済みリクエストの
+   割合が十分に上がったのを見てから、Firestore と Storage の適用を有効にする。
+   いきなり適用すると、古いバンドルを掴んでいる利用者がその場で締め出される。
+
+キーを入れなければ App Check は初期化されない。つまり手元の checkout や、設定前の
+ビルドはこれまでどおり動く。
+
+ローカルから **本番の** プロジェクトを触るとき、ふつうは何もしなくてよい。
+サイトキーの許可ドメインに `localhost` が入っていれば、`pnpm dev` でも本物の
+reCAPTCHA がそのまま通る。
+
+通らない環境（別ホスト名、reCAPTCHA を出せない状況）では、デバッグトークンを使う:
+
+1. `.env` に `VITE_FIREBASE_APPCHECK_DEBUG_TOKEN=true` と書いて `pnpm dev`。
+   SDK がトークンを 1 つ作り、ブラウザのコンソールに出す。
+2. その値を App Check コンソールのデバッグトークンとして登録する。
+3. 同じ値を `.env` に貼り直す（`=true` を置き換える）。以降はそれが使われる。
+
+`true` を渡したときだけ SDK は新しいトークンを作る。文字列をそのまま渡すと、
+それがトークンそのものとして扱われる。この変数が読まれるのは `pnpm dev` の
+ときだけで、`vite build` の出力には決して入らない。
+
+止められないものも書いておく:
+
+- **人が本物のブラウザで大量に作ること。** App Check が止めるのは自動化であって、
+  乱用そのものではない。
+- **`scripts/*`。** どちらも gcloud のアクセストークンで Firestore REST を叩くので、
+  ルールも App Check も通らない。適用を有効にしても壊れない。
+
 ## エミュレータで動かす
 
 Java が要る（`scoop install temurin-lts-jre` など）。
