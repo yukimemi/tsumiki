@@ -275,6 +275,63 @@ export function groupTasksByCategory(tasks: Task[]): TaskCategoryGroup[] {
 }
 
 /**
+ * Whether the group at `index` can trade places with the one `delta` away.
+ *
+ * The unfiled bucket is pinned last by rank whatever its tasks' `order`, so a
+ * move that touched it would rewrite `order` and change nothing on screen. A
+ * group with no reachable neighbour therefore has no button at all rather
+ * than one that lies.
+ */
+export function canMoveCategoryGroup(
+  groups: TaskCategoryGroup[],
+  index: number,
+  delta: number,
+): boolean {
+  const from = groups[index];
+  const to = groups[index + delta];
+  if (!from || !to) return false;
+  return from.key !== UNFILED_KEY && to.key !== UNFILED_KEY;
+}
+
+/**
+ * Every task id in the order that swapping the group at `index` with the one
+ * `delta` away produces — `reorderTasks` input, so ids outside `groups`
+ * travel along in their own slots or they would collide with the rewritten
+ * positions.
+ *
+ * Group order is not stored anywhere: it is read back from the smallest
+ * `order` in each group, which is why ↑ / ↓ on a single task can never move
+ * one (a swap inside a group leaves the group's own slots, and so its
+ * minimum, exactly where they were). Moving a group means moving its tasks,
+ * so the groups are re-laid as contiguous blocks in the new order and their
+ * tasks poured back into the slots the list already occupied in `all`. Tasks
+ * of the other list — active rows while the archived ones are being moved,
+ * and the reverse — keep their slots, so their own grouping does not shift.
+ *
+ * `null` when the move is not available, so the caller can ask and act with
+ * one answer.
+ */
+export function moveCategoryGroup(
+  all: Task[],
+  groups: TaskCategoryGroup[],
+  index: number,
+  delta: number,
+): string[] | null {
+  if (!canMoveCategoryGroup(groups, index, delta)) return null;
+
+  const next = [...groups];
+  next[index] = groups[index + delta];
+  next[index + delta] = groups[index];
+
+  const moved = next.flatMap((group) => group.tasks.map((task) => task.id));
+  const inGroups = new Set(moved);
+  let taken = 0;
+  return all.map((task) =>
+    inGroups.has(task.id) ? moved[taken++] : task.id,
+  );
+}
+
+/**
  * Every category already in use, for offering them instead of retyping.
  *
  * `そのほか` is filtered out even if a task somehow carries it: suggesting
