@@ -65,16 +65,11 @@ Firebase 側でやること:
    firebase deploy --only firestore:indexes            # 複合インデックス
    ```
 
-4. **最初のひとりだけ** は手で許可リストに載せる。ルールが `config/access` を
-   見てから書き込みを許すので、ここだけは鶏と卵になる。
+4. Authentication → Settings → **承認済みドメイン** に、アプリを配るホスト名を足す。
+   ここに無いホストからはサインインが始まらない。
 
-   ```
-   config/access
-     allowedEmails: ["あなたの@gmail.com"]
-     adminEmails:   ["あなたの@gmail.com"]
-   ```
-
-   これ以降は、アプリから家族を招待するたびに自動で追加される。
+あとは Google でサインインして「かぞくを つくる」を押せば使える。
+許可リストのような手作業の登録は無い。
 
 Storage のルールが Firestore を参照するので、画像を使うなら一度だけ IAM 権限が要る:
 
@@ -94,22 +89,21 @@ firebase emulators:start --only auth,firestore --project demo-tsumiki
 
 `.env` に `VITE_USE_EMULATOR=true` を入れると、アプリが `127.0.0.1` のエミュレータに
 つながる。ポートは `firebase.json` の `emulators` と `src/lib/firebase.ts` の定数を
-そろえてある。エミュレータは空なので、許可リストだけ先に入れておく:
-
-```sh
-curl -X PATCH "http://127.0.0.1:8085/v1/projects/demo-tsumiki/databases/(default)/documents/config/access" \
-  -H "Authorization: Bearer owner" -H "Content-Type: application/json" \
-  -d '{"fields":{"allowedEmails":{"arrayValue":{"values":[{"stringValue":"you@example.com"}]}},"adminEmails":{"arrayValue":{"values":[{"stringValue":"you@example.com"}]}}}}'
-```
+そろえてある。エミュレータは空のまま使える — サインインして かぞくを つくれば、
+その場でデータが生える。
 
 ## かぞくの入りかた
 
+かぞくを つくるのは、サインインして なまえを 入れるだけ。あとから人を足すには:
+
 1. 親が せってい → かぞくの ひと → **かぞくを さそう** で Google のメールアドレスを入れる。
-2. アプリが `households/{id}.invitedEmails` と `config/access.allowedEmails` の両方に
-   そのアドレスを足す。
+2. アプリが `households/{id}.invitedEmails` にそのアドレスを足す。
 3. 招待された人が **同じアドレス** でサインインすると、その瞬間に自分を `memberIds` に
    書き込んで家族に加わる。これはルール上、非メンバーに許された唯一の書き込み
    (`isClaiming()`) で、自分の uid ぶんしか触れない。
+
+家族の外から見えるものは無い。ルールが読むのは家族ドキュメント 1 枚だけで、そこに
+載っていない人は、どの家族のどのデータにも届かない。
 
 ## 役割
 
@@ -131,8 +125,7 @@ curl -X PATCH "http://127.0.0.1:8085/v1/projects/demo-tsumiki/databases/(default
 判定できる。
 
 ```
-config/access, config/accessGrants   許可リストとその逆引き
-users/{uid}                          プロフィール
+users/{uid}                          プロフィール（本人だけが読める）
 households/{id}                      メンバーシップと役割
 tasks/{id}                           やること定義
 entries/{id}                         実績（id = taskId__memberId__日付）

@@ -3,7 +3,8 @@
 かぞくで「やること」を積み上げるアプリ。やったぶんだけコインが貯まり、貯まったら
 おこづかいと交換する。家族全員の実施状況がタイムラインで見え、コメントで褒め合える。
 
-- 認証: Google サインインのみ。メール招待で家族に加わる。
+- 認証: Google サインインのみ。サインインすれば誰でも かぞくを作れる（セルフサインアップ）。
+  すでにある かぞくには メール招待で加わる。グローバルな許可リストは持たない。
 - 承認: タスクごとに「親の承認が要るか」を設定する。要らないタスクは完了した瞬間に
   コインが入る。要るタスクは `pending` になり、親が承認した時点でコインが入る。
 - ホスティング: Vercel 本番 (`hnd1`)。Firebase は Auth / Firestore / Storage のみ。
@@ -16,9 +17,7 @@
 セキュリティルール側も `get(/households/$(householdId))` 一回で判定できるため。
 
 ```
-config/access                      { allowedEmails: string[], adminEmails: string[] }
-config/accessGrants                { grants: { email: string, householdId: string }[] }
-users/{uid}                        プロフィール（サインインのたびに merge 更新）
+users/{uid}                        プロフィール（サインインのたびに merge 更新／本人だけが読める）
 households/{householdId}           かぞく。メンバーシップと RBAC の親ドキュメント
 tasks/{taskId}                     やること定義（くり返しルールを持つ）
 entries/{entryId}                  実績 1 回ぶん。id = `${taskId}__${memberId}__${dateKey}`
@@ -52,18 +51,28 @@ payouts/{payoutId}                 おこづかい交換の申請と結果
 
 `owner` は `parent` の権限をすべて含む。判定は `src/lib/roles.ts` に集約する。
 
-### 招待フロー（kakeizu 方式をそのまま踏襲）
+### サインアップと招待フロー
 
-1. 親が `inviteByEmail(householdId, email, role)` を呼ぶ。
-   - `households/{id}.invitedEmails` に email を追加、`pendingRoles[encodeEmailKey(email)]` に役割を保存
-   - `config/access.allowedEmails` に email を追加、`config/accessGrants.grants` に
-     `{email, householdId}` を記録（どの家族が誰に許可を出したかの逆引き）
+サインアップは household を作ることそのもので、前段の登録は無い。ルールの
+`households` create が要求するのは verified な Google アカウントと「作った人が
+ひとりだけ、owner として入っている」という形だけ（`firestore.rules`）。
+
+既存の household に人を足すのが招待:
+
+1. 親が `inviteByEmail(householdId, email, role)` を呼び、
+   `households/{id}.invitedEmails` に email を追加、
+   `pendingRoles[encodeEmailKey(email)]` に役割を保存する。
 2. 招待された人が Google サインインすると `claimEmailInvites(user)` が走り、
    `invitedEmails` に自分の verified email がある household を探して、自分の uid を
    `memberIds` / `memberRoles` / `memberInfo` に書き込み、`invitedEmails` から自分を消す。
    これはルールの `isClaiming()` が許可する唯一の非メンバー書き込み。
-3. 除名時は `removeAccessGrant` が、他の household からも許可が出ていない場合に限り
-   `allowedEmails` から取り除く。
+3. 除名は `households` の membership マップから消すだけ。連動して落とす外部の
+   許可リストは無い。
+
+> 以前は `config/access`（グローバル許可リスト）と `config/accessGrants`（その逆引き）が
+> 全書き込みの前段にあり、最初のひとりを手で登録する必要があった。セルフサインアップ化で
+> 両方とも廃止。ルール側は `match /config/{document=**}` を deny で残してあり、本番に
+> 残っている当時のドキュメントが読めないようにしてある。
 
 `pendingRoles` のキーは Firestore のマップキーに `.` が使えないため
 `encodeEmailKey(email)` = `email.replace(/\./g, "%2E")` で符号化する。

@@ -1,11 +1,10 @@
-// Email invites, ported from kakeizu.
+// Email invites.
 //
-// Two things have to agree before an invited person can write anything:
-// `households/{id}.invitedEmails` says which household wants them, and
-// `config/access.allowedEmails` is the global gate the rules check first.
-// `config/accessGrants` is the reverse index that makes revocation possible:
-// without it, removing someone from one household would either strip their
-// access to every other household or leave them permanently allowed.
+// A household is the only membership boundary there is: `invitedEmails` says
+// which family wants an address, and claiming it is what turns the invitee
+// into a member. There is no second, global list to keep in step — signup is
+// self-serve, so an invited person already has an account they can reach the
+// app with, and the invite only decides which family they land in.
 //
 // The claim is the only write a non-member is allowed to make against a
 // household, and the rule (`isClaiming()`) validates the whole shape at once.
@@ -18,11 +17,9 @@ import {
   collection,
   deleteField,
   doc,
-  getDoc,
   getDocs,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -43,114 +40,8 @@ const COL = "households";
 /** Emoji a claimed member starts with: a single building block. */
 const DEFAULT_EMOJI = "🧱";
 
-type Grant = { email: string; householdId: string };
-
-function allowlistDoc() {
-  return doc(db(), "config", "access");
-}
-
-function grantsDoc() {
-  return doc(db(), "config", "accessGrants");
-}
-
 function normalise(email: string): string {
   return email.trim().toLowerCase();
-}
-
-/** Admins are never locked out, whatever the grant bookkeeping says. */
-async function isAdminEmail(email: string): Promise<boolean> {
-  try {
-    const snap = await getDoc(allowlistDoc());
-    const admins = (snap.data()?.adminEmails ?? []) as string[];
-    return admins.some((a) => normalise(a) === email);
-  } catch {
-    return false;
-  }
-}
-
-async function readGrants(): Promise<Grant[]> {
-  const snap = await getDoc(grantsDoc());
-  return (snap.data()?.grants ?? []) as Grant[];
-}
-
-/**
- * Record that `householdId` vouches for `email`, and open the global gate.
- * Both documents are written with merge so the very first invite in a fresh
- * project does not need a bootstrap step.
- */
-export async function addAccessGrant(
-  email: string,
-  householdId: string,
-): Promise<void> {
-  const lower = normalise(email);
-  if (!lower.includes("@")) return;
-  await setDoc(
-    grantsDoc(),
-    { grants: arrayUnion({ email: lower, householdId }) },
-    { merge: true },
-  );
-  await setDoc(
-    allowlistDoc(),
-    { allowedEmails: arrayUnion(lower), updatedAt: serverTimestamp() },
-    { merge: true },
-  );
-}
-
-/**
- * Drop one (email, household) grant. The email loses global access only when
- * no other household still vouches for it.
- */
-export async function removeAccessGrant(
-  email: string,
-  householdId: string,
-): Promise<void> {
-  const lower = normalise(email);
-  if (!lower) return;
-  await setDoc(
-    grantsDoc(),
-    { grants: arrayRemove({ email: lower, householdId }) },
-    { merge: true },
-  );
-  if (await isAdminEmail(lower)) return;
-  const remaining = await readGrants();
-  if (remaining.some((g) => g.email === lower)) return;
-  await setDoc(
-    allowlistDoc(),
-    { allowedEmails: arrayRemove(lower), updatedAt: serverTimestamp() },
-    { merge: true },
-  );
-}
-
-/** Called when a household is deleted: its grants can vouch for nobody. */
-export async function revokeAllGrantsForHousehold(
-  householdId: string,
-): Promise<void> {
-  const grants = await readGrants();
-  const dropped = grants.filter((g) => g.householdId === householdId);
-  if (dropped.length === 0) return;
-  await setDoc(
-    grantsDoc(),
-    { grants: arrayRemove(...dropped) },
-    { merge: true },
-  );
-
-  const stillVouched = new Set(
-    grants
-      .filter((g) => g.householdId !== householdId)
-      .map((g) => g.email),
-  );
-  const orphaned: string[] = [];
-  for (const email of new Set(dropped.map((g) => g.email))) {
-    if (stillVouched.has(email)) continue;
-    if (await isAdminEmail(email)) continue;
-    orphaned.push(email);
-  }
-  if (orphaned.length === 0) return;
-  await setDoc(
-    allowlistDoc(),
-    { allowedEmails: arrayRemove(...orphaned), updatedAt: serverTimestamp() },
-    { merge: true },
-  );
 }
 
 export async function inviteByEmail(
@@ -167,7 +58,6 @@ export async function inviteByEmail(
     [`pendingRoles.${encodeEmailKey(lower)}`]: role,
     updatedAt: serverTimestamp(),
   });
-  await addAccessGrant(lower, householdId);
 }
 
 export async function cancelEmailInvite(
@@ -181,7 +71,6 @@ export async function cancelEmailInvite(
     [`pendingRoles.${encodeEmailKey(lower)}`]: deleteField(),
     updatedAt: serverTimestamp(),
   });
-  await removeAccessGrant(lower, householdId);
 }
 
 /** First colour nobody in this household is using, so avatars stay distinct. */

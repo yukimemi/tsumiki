@@ -50,8 +50,8 @@ export function LoginPage() {
         </button>
 
         <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
-          かぞくに招待されたメールアドレスでサインインしてください。
           はじめての人は、サインインしたあとに かぞくを つくれます。
+          さそわれた人は、さそわれた メールアドレスで サインインしてください。
         </p>
 
         {error !== null && (
