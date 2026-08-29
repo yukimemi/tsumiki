@@ -645,9 +645,24 @@ things it left behind, both deliberate:
   database to anyone who makes an account. Do not loosen it without moving that
   data somewhere it belongs.
 
-Not yet in place, and worth knowing before the user base is anything but
-family: nothing rate-limits household creation. App Check is the intended
-answer.
+Nothing in the rules limits *how often* a signed-in user may write, and
+nothing can — rules see one request at a time. App Check (reCAPTCHA v3,
+wired in `src/lib/firebase.ts`) is what covers that gap, and only for
+automated abuse: it cannot stop a person creating households by hand.
+
+Two things about it that are easy to get wrong:
+
+- **It initialises inside `ensureApp()`, not at the entry point.** App Check
+  has to be started between `initializeApp()` and the first call into any
+  Firebase service. Every service getter in that file is lazy, so
+  `ensureApp()` is the only place with that guarantee.
+- **Code alone does nothing.** Enforcement is a Firebase console setting per
+  service. Until it is switched on, an unattested request is served normally
+  — which is deliberate: turn it on only after the App Check metrics show
+  verified traffic, or you lock out everyone still holding an older bundle.
+
+`scripts/*` are unaffected either way: they use the Firestore REST API with a
+gcloud token, which bypasses rules and App Check both.
 
 ### Cross-file invariants
 
