@@ -49,6 +49,7 @@ import { useAction } from "./useAction";
 export function TodayScreen(): JSX.Element {
   const uid = useUid();
   const { household, householdId, members, isParent } = useHousehold();
+  const isPro = household?.plan === "pro";
   const { celebrate, combo } = useEffects();
   const action = useAction();
   const photoAction = useAction();
@@ -472,7 +473,7 @@ export function TodayScreen(): JSX.Element {
 
             <div className="flex flex-col gap-2">
               {detailRow.entry === null && !isFuture ? (
-                detailRow.task.needsPhoto ? (
+                detailRow.task.needsPhoto && isPro ? (
                   <>
                     <p className="text-sm text-muted">
                       しゃしんを とると おわりになります。
@@ -510,7 +511,7 @@ export function TodayScreen(): JSX.Element {
 
               {/* Any completion may carry a photo, required or not — and a
                   blurry one can be retaken while it is still waiting. */}
-              {detailRow.entry && !isFuture ? (
+              {detailRow.entry && !isFuture && isPro ? (
                 <PhotoButton
                   label={
                     detailRow.entry.photoPath

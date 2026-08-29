@@ -47,6 +47,8 @@ export function SettingsScreen() {
         payoutMinYen={household.payoutMinYen ?? 0}
         payoutStepYen={household.payoutStepYen ?? 0}
         canEdit={isOwner}
+        plan={household.plan ?? "free"}
+        taskCount={household.taskCount ?? 0}
       />
 
       {households.length > 1 ? (
@@ -101,6 +103,8 @@ export function SettingsScreen() {
             actorUid={uid}
             members={members}
             coinYen={household.coinYen}
+            plan={household.plan ?? "free"}
+            taskCount={household.taskCount ?? 0}
           />
         ) : (
           <p className="text-sm text-muted">
@@ -134,6 +138,8 @@ function HouseholdCard(props: {
   payoutMinYen: number;
   payoutStepYen: number;
   canEdit: boolean;
+  plan: "free" | "pro";
+  taskCount: number;
 }) {
   const action = useAction();
   // Seeded from the document and then owned by the form. Remounting on a
@@ -180,6 +186,12 @@ function HouseholdCard(props: {
   return (
     <Card>
       <h2 className="mb-3 text-base font-bold text-ink">かぞく</h2>
+
+      <p className="mb-3 text-sm text-muted">
+        {props.plan === "pro"
+          ? "いまは pro プランです。しゃしんも つかえます。"
+          : `いまは むりょうプランです。やることは いま ${props.taskCount} こ／30こまで。しゃしんは pro プランで つかえます。`}
+      </p>
 
       {props.canEdit ? (
         <div className="flex flex-col gap-3">

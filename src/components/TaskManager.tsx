@@ -47,8 +47,10 @@ export function TaskManager(props: {
   actorUid: string;
   members: Member[];
   coinYen: number;
+  plan: "free" | "pro";
+  taskCount: number;
 }): JSX.Element {
-  const { householdId, actorUid, members, coinYen } = props;
+  const { householdId, actorUid, members, coinYen, plan, taskCount } = props;
   const tasks = useAllTasks(householdId);
   const action = useAction();
 
@@ -107,7 +109,7 @@ export function TaskManager(props: {
 
   const confirmDelete = async () => {
     if (!deleting) return;
-    const ok = await action.run(() => softDeleteTask(deleting.id));
+    const ok = await action.run(() => softDeleteTask(deleting.id, householdId));
     if (ok) setDeleting(null);
   };
 
@@ -318,6 +320,8 @@ export function TaskManager(props: {
         actorUid={actorUid}
         members={members}
         coinYen={coinYen}
+        plan={plan}
+        taskCount={taskCount}
         onClose={() => setEditing(null)}
       />
 

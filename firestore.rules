@@ -55,6 +55,40 @@ service cloud.firestore {
       return isMember(id) && roleIn(id) == 'owner';
     }
 
+    // Unset means free; only scripts/set-plan.ts (bypasses rules via a
+    // gcloud token) may ever move a household to 'pro'.
+    function isPro(id) {
+      return hhExists(id) && hh(id).get('plan', 'free') == 'pro';
+    }
+
+    // Nothing here ever asserts anything into the plan; the client is not
+    // trusted to know it either. This guards both create and update: it
+    // compares the incoming plan (defaulting to 'free') against what is
+    // already stored (also defaulting to 'free'), so a client write that
+    // tries to introduce or change 'plan' is rejected, while a write that
+    // simply leaves the field untouched sails through unaffected.
+    function isPlanImmutable() {
+      return request.resource.data.get('plan', 'free')
+        == resource.data.get('plan', 'free');
+    }
+
+    // taskCount is a rebuildable cache (scripts/recalc-task-counts.ts), kept
+    // honest here only against a runaway client: it may move by exactly ±1
+    // per write, alongside createTask/softDeleteTask. No floor at 0: a
+    // household created before this field existed defaults its "current"
+    // value to 0, so its first softDeleteTask would compute -1 and, with a
+    // floor, have its whole batch (including the task's own delete) rejected
+    // until scripts/recalc-task-counts.ts backfilled it. A cache is allowed
+    // to dip below true for a while; it only ever gates the free cap
+    // (isPro(hh) || taskCount < 30), and a low/negative reading is stricter
+    // than reality, never looser.
+    function isTaskCountUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['taskCount', 'updatedAt'])
+        && request.resource.data.get('taskCount', 0)
+             - resource.data.get('taskCount', 0) in [-1, 1];
+    }
+
     // Retired: `config/access` (global allowlist) and `config/accessGrants`
     // (its reverse index) gated the whole project while signup was invite-only.
     // Sealed rather than dropped, because leftover documents from that era are
@@ -131,17 +165,22 @@ service cloud.firestore {
         && request.resource.data.memberInfo.keys().hasOnly([request.auth.uid])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 30;
-      allow update: if isOwner(householdId)
-        || isClaiming()
-        || (isParent(householdId) && membershipKeysOnly())
-        || isSelfInfoUpdate(householdId);
+        && request.resource.data.name.size() <= 30
+        && request.resource.data.get('plan', 'free') == 'free';
+      allow update: if (isParent(householdId) && isTaskCountUpdate())
+        || ((isOwner(householdId)
+              || isClaiming()
+              || (isParent(householdId) && membershipKeysOnly())
+              || isSelfInfoUpdate(householdId))
+            && isPlanImmutable());
       allow delete: if isOwner(householdId);
     }
 
     match /tasks/{taskId} {
       allow read: if isMember(resource.data.householdId);
-      allow create: if isParent(request.resource.data.householdId);
+      allow create: if isParent(request.resource.data.householdId)
+        && (isPro(request.resource.data.householdId)
+            || hh(request.resource.data.householdId).get('taskCount', 0) < 30);
       allow update: if isParent(resource.data.householdId)
         && request.resource.data.householdId == resource.data.householdId;
       allow delete: if isParent(resource.data.householdId);
@@ -201,7 +240,8 @@ service cloud.firestore {
     // and only the person the completion belongs to or a parent may do it —
     // a sibling cannot rewrite someone else's evidence.
     function isPhotoUpdate() {
-      return isMember(resource.data.householdId)
+      return isPro(resource.data.householdId)
+        && isMember(resource.data.householdId)
         && (resource.data.memberId == request.auth.uid
             || isParent(resource.data.householdId))
         && request.resource.data.diff(resource.data).affectedKeys()

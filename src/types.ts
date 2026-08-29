@@ -75,6 +75,19 @@ export type Household = {
    */
   payoutMinYen?: number;
   payoutStepYen?: number;
+  /**
+   * `"free" | "pro"`. Absent means free. Never writable by the client —
+   * only `scripts/set-plan.ts` moves this, by bypassing the rules with a
+   * gcloud token (see firestore.rules `isPlanImmutable`).
+   */
+  plan?: "free" | "pro";
+  /**
+   * Cache of the live task count, kept in step with `plan`'s 30-task free
+   * cap. Mutated only by ±1, in the same batch as `createTask` /
+   * `softDeleteTask` (`src/data/tasks.ts`); rebuildable via
+   * `scripts/recalc-task-counts.ts` if it ever drifts.
+   */
+  taskCount?: number;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };

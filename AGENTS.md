@@ -721,6 +721,8 @@ account at 100%.
 | Emails are stored lowercased | `src/data/invites.ts`, `src/components/InviteForm.tsx`, `firestore.rules` (`userEmail()`) |
 | Composite indexes | `firestore.indexes.json` — add one whenever a query gains an `orderBy` beside a `where` |
 | The fixed preview hostname | Firebase authorized domains (console) + the `vercel alias set` line under *Vercel previews and Firebase authorized domains* below |
+| `Household.plan` / `taskCount` | `src/types.ts`, `firestore.rules` (`isPro`, `isPlanImmutable`, `isTaskCountUpdate`), `storage.rules` (`isPro`), `src/data/tasks.ts`, `scripts/set-plan.ts`, `scripts/recalc-task-counts.ts` |
+| The free-plan task cap (`30`) | `firestore.rules` (`taskCount < 30` on `tasks` create), `src/components/TaskEditor.tsx` (`atCap`), `src/screens/SettingsScreen.tsx` (the "30こまで" copy) — no shared constant, so a future change to the number must touch all three |
 
 ### Coins
 
@@ -729,6 +731,30 @@ may delete, which is what makes the household cascade possible). `balances` is a
 cache written in the same `writeBatch` as the ledger row; if it ever drifts,
 `scripts/recalc-balances.ts` rebuilds it from the ledger. `Balance.earned` is a
 lifetime total: it goes down only when a completion is undone, never on a spend.
+
+### Plan (free / pro)
+
+`households/{id}.plan` is `"free" | "pro"`, absent meaning free. Two facts
+that only hold here, not anywhere the code says them explicitly:
+
+- **The client can never write `plan`.** `firestore.rules`' `isOwner`
+  branch on `households` update otherwise lets an owner write any field —
+  `isPlanImmutable` closes that specific hole. The only path that moves it
+  is `scripts/set-plan.ts`, which hits the Firestore REST API with a gcloud
+  token (same trick as `scripts/deploy-rules.ts`) and so never goes through
+  the rules at all.
+- **The 30-task free cap (`households/{id}.taskCount`) is a soft gate, on
+  purpose.** `firestore.rules` can only require the counter move by ±1 in
+  the same write as a task create/delete (`isTaskCountUpdate`); it cannot
+  require that a task create *always* comes with a counter bump, because
+  rules cannot enforce atomicity across two documents. A client that skips
+  `src/data/tasks.ts`'s `writeBatch` and creates a task directly breaks the
+  cap. App Check raises the bar (real app origin, real browser, no
+  automation) but does not close it. This is accepted until someone actually
+  pays for pro — see issue #35 for the plan to harden it with a `tasks`
+  onCreate Cloud Function next to `functions/billing-guard`.
+- `taskCount` is a cache, like `balances`: rebuild it with
+  `scripts/recalc-task-counts.ts` rather than trusting it as truth.
 
 ### Design language
 

@@ -276,6 +276,8 @@ export function TaskEditor(props: {
   coinYen: number;
   /** Names already in use, offered so groups are picked rather than retyped. */
   categories: string[];
+  plan: "free" | "pro";
+  taskCount: number;
   onClose(): void;
 }): JSX.Element {
   const {
@@ -286,12 +288,20 @@ export function TaskEditor(props: {
     members,
     coinYen,
     categories,
+    plan,
+    taskCount,
     onClose,
   } = props;
   const action = useAction();
-  // The submit button sits in the pinned footer, outside the <form>; the
+  // The submit button sits in the pinned footer, outside the `<form>`; the
   // button's `form` attribute is what connects the two.
   const formId = useId();
+
+  // Checked before the write, in friendly Japanese, rather than letting the
+  // rules reject it: firestore.rules enforces the same 30-task free cap
+  // (`isPro(hh) || taskCount < 30`), but a rejected write reads as a bug to
+  // a child, not a plan limit.
+  const atCap = !task && plan !== "pro" && taskCount >= 30;
 
   const close = () => {
     action.clear();
@@ -299,6 +309,7 @@ export function TaskEditor(props: {
   };
 
   const submit = async (values: FormValues) => {
+    if (atCap) return;
     const draft = draftOf(values, members);
     const ok = await action.run(async () => {
       if (task) {
@@ -325,14 +336,23 @@ export function TaskEditor(props: {
       title={task ? "やることを なおす" : "あたらしい やること"}
       footer={
         <div className="space-y-2">
-          {action.error ? (
+          {atCap ? (
+            <p className="text-sm font-bold text-late">
+              いまは 30こまで つくれます。おうちの ひとに きいてみてね
+            </p>
+          ) : action.error ? (
             <p className="text-sm font-bold text-late">{action.error}</p>
           ) : null}
           <div className="flex gap-3">
             <Button variant="ghost" block onClick={close} disabled={action.busy}>
               やめる
             </Button>
-            <Button type="submit" form={formId} block disabled={action.busy}>
+            <Button
+              type="submit"
+              form={formId}
+              block
+              disabled={action.busy || atCap}
+            >
               {action.busy ? <Spinner size="sm" /> : task ? "なおす" : "つくる"}
             </Button>
           </div>
@@ -354,6 +374,7 @@ export function TaskEditor(props: {
           members={members}
           coinYen={coinYen}
           categories={categories}
+          plan={plan}
           onSubmit={submit}
         />
       ) : null}
@@ -367,9 +388,10 @@ function TaskForm(props: {
   members: Member[];
   coinYen: number;
   categories: string[];
+  plan: "free" | "pro";
   onSubmit(values: FormValues): Promise<void>;
 }): JSX.Element {
-  const { formId, task, members, coinYen, categories } = props;
+  const { formId, task, members, coinYen, categories, plan } = props;
   const categoryListId = useId();
   const {
     register,
@@ -470,10 +492,15 @@ function TaskForm(props: {
         render={({ field }) => (
           <Card className="bg-sunk">
             <Toggle
-              checked={field.value}
+              checked={plan === "pro" && field.value}
               onChange={field.onChange}
+              disabled={plan !== "pro"}
               label="しゃしんを とる"
-              hint="やったあとの しゃしんが しょうこに なります"
+              hint={
+                plan === "pro"
+                  ? "やったあとの しゃしんが しょうこに なります"
+                  : "pro プランで つかえます"
+              }
             />
           </Card>
         )}
