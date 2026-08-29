@@ -110,10 +110,10 @@ const FEATURES: readonly { emoji: string; title: string; body: string }[] = [
 export function AboutScreen() {
   return (
     <div
-      className="min-h-full"
+      className="h-full overflow-y-auto overscroll-contain"
       style={{ background: "var(--paper)", color: "var(--ink)" }}
     >
-      <main className="mx-auto flex max-w-lg flex-col gap-10 px-4 py-10">
+      <main className="safe-x safe-t safe-b mx-auto flex max-w-lg flex-col gap-10 px-4 py-10">
         <header className="flex flex-col items-center gap-3 text-center">
           <span className="text-5xl" aria-hidden="true">
             🌱
