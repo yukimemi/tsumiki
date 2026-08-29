@@ -8,11 +8,11 @@
 // tens of tasks, not thousands.
 
 import {
-  addDoc,
   collection,
   deleteField,
   doc,
   getDocs,
+  increment,
   query,
   serverTimestamp,
   updateDoc,
@@ -106,8 +106,10 @@ export async function createTask(
   draft: TaskDraft,
 ): Promise<string> {
   const order = draft.order ?? (await nextOrder(householdId));
-  const ref = await addDoc(
-    collection(db(), COL),
+  const ref = doc(collection(db(), COL));
+  const batch = writeBatch(db());
+  batch.set(
+    ref,
     forWrite({
       ...draft,
       order,
@@ -117,6 +119,14 @@ export async function createTask(
       deletedAt: null,
     }),
   );
+  // Cache bump alongside the task itself, so the two never disagree on a
+  // partial write; see firestore.rules `isTaskCountUpdate` for the ±1 guard
+  // and scripts/recalc-task-counts.ts for rebuilding it if it ever drifts.
+  batch.update(doc(db(), "households", householdId), {
+    taskCount: increment(1),
+    updatedAt: serverTimestamp(),
+  });
+  await batch.commit();
   return ref.id;
 }
 
@@ -158,11 +168,20 @@ export async function setTaskArchived(
   await updateDoc(doc(db(), COL, id), forMerge({ archived }));
 }
 
-export async function softDeleteTask(id: string): Promise<void> {
-  await updateDoc(doc(db(), COL, id), {
+export async function softDeleteTask(
+  id: string,
+  householdId: string,
+): Promise<void> {
+  const batch = writeBatch(db());
+  batch.update(doc(db(), COL, id), {
     deletedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  batch.update(doc(db(), "households", householdId), {
+    taskCount: increment(-1),
+    updatedAt: serverTimestamp(),
+  });
+  await batch.commit();
 }
 
 /** `ids` in their new order; positions are rewritten from scratch. */

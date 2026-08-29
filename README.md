@@ -136,7 +136,7 @@ reCAPTCHA がそのまま通る。
 
 - **人が本物のブラウザで大量に作ること。** App Check が止めるのは自動化であって、
   乱用そのものではない。
-- **`scripts/*`。** どちらも gcloud のアクセストークンで Firestore REST を叩くので、
+- **`scripts/*`。** どれも gcloud のアクセストークンで Firestore REST を叩くので、
   ルールも App Check も通らない。適用を有効にしても壊れない。
 
 ## 課金の守り
@@ -278,7 +278,7 @@ firebase emulators:start --only auth,firestore --project demo-tsumiki
 
 ```
 users/{uid}                          プロフィール（本人だけが読める）
-households/{id}                      メンバーシップと役割
+households/{id}                      メンバーシップと役割（plan・taskCount も含む）
 tasks/{id}                           やること定義
 entries/{id}                         実績（id = taskId__memberId__日付）
 comments/{id}                        実績へのコメント
@@ -292,6 +292,41 @@ payouts/{id}                         おこづかい交換
 ```sh
 pnpm exec tsx scripts/recalc-balances.ts <householdId> --dry-run
 ```
+
+`households/{id}.taskCount` も同じ考え方のキャッシュ。`createTask` /
+`softDeleteTask`（`src/data/tasks.ts`）がタスク本体と同じ `writeBatch` で ±1 する
+だけで、真実は `tasks` コレクションの実数の方。ズレたら作り直せる:
+
+```sh
+pnpm exec tsx scripts/recalc-task-counts.ts <householdId> --dry-run
+```
+
+## プラン（無料 / pro）
+
+`households/{id}.plan` は `"free"` か `"pro"`。未設定は `"free"` 扱い。
+
+| | 無料 | pro |
+| --- | --- | --- |
+| やること | 30 個まで | 上限なし |
+| 写真つき実績 | 使えない | 使える |
+| それ以外 | 全部使える | 同じ |
+
+**`plan` はクライアントから絶対に書けない。** `firestore.rules` の `isPlanImmutable`
+が households の create / update すべてでこれを塞いでいて、書き換えられる経路は
+ひとつだけ:
+
+```sh
+pnpm exec tsx scripts/set-plan.ts <householdId> <free|pro>
+```
+
+`scripts/*` と同じ gcloud トークン経由なので、ルールを迂回する。クライアントには
+一切の書き込み権限を渡していない。
+
+**30 個のタスク上限はソフトゲートで、いまはそれでいい。** `households/{id}.taskCount`
+を増やさずにタスクだけ作れば理屈の上では破れる — ルールは 2 つのドキュメントに
+またがる原子性を要求できないので。App Check が効いているぶん敷居は高いが、破れない
+わけではない。実際にお金を払う人が現れたら、`tasks` の onCreate トリガーで実数を
+数えて超過分を打ち消す Cloud Function（`functions/billing-guard` の隣）に切り替える。
 
 ## 開発メモ
 

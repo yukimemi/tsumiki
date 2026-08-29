@@ -70,6 +70,7 @@ export async function createHousehold(
       memberRoles: { [user.uid]: "owner" },
       memberInfo: { [user.uid]: clean(member) },
       coinYen: DEFAULT_COIN_YEN,
+      taskCount: 0,
     }),
   );
   return ref.id;

@@ -47,6 +47,12 @@ service firebase.storage {
             in ['owner', 'parent'];
     }
 
+    // Unset means free; only scripts/set-plan.ts writes 'pro' (it bypasses
+    // these rules with a gcloud token, same as firestore.rules).
+    function isPro(householdId) {
+      return household(householdId).get('plan', 'free') == 'pro';
+    }
+
     // Proof-of-task photos: households/{id}/entries/{entryId}/{file}.
     //
     // Any member may upload, not just a parent. The whole point is that the
@@ -58,6 +64,7 @@ service firebase.storage {
     match /households/{householdId}/entries/{entryId}/{file} {
       allow read: if isMember(householdId);
       allow create, update: if isMember(householdId)
+        && isPro(householdId)
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
       // Undo removes the photo with the completion, so a member has to be able
