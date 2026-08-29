@@ -4,6 +4,8 @@
 // Deliberately dependency-free: no Firebase, no auth, no household context —
 // it must render the same for everyone, including a bot.
 
+import { Link } from "react-router-dom";
+
 import type { HouseholdMember } from "../household/context";
 import { CoinRanking } from "../components/CoinRanking";
 import { Avatar, Badge, Card, CoinAmount, ProgressRing } from "../components/ui";
@@ -164,8 +166,13 @@ export function AboutScreen() {
           </Card>
         </section>
 
-        <footer className="text-center text-xs text-muted">
-          はじめるには、家族の代表者が Google アカウントで サインインしてください。
+        <footer className="flex flex-col items-center gap-2 text-center text-xs text-muted">
+          <p>
+            はじめるには、家族の代表者が Google アカウントで サインインしてください。
+          </p>
+          <Link to="/privacy" className="underline">
+            プライバシーポリシー
+          </Link>
         </footer>
       </main>
     </div>
