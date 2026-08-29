@@ -126,6 +126,12 @@ export function SettingsScreen() {
       <Card>
         <h2 className="mb-3 text-base font-bold text-ink">そのほか</h2>
         <div className="flex flex-col gap-3">
+          <Link
+            to="/about"
+            className="min-h-tap flex items-center justify-center rounded-card border border-rule text-sm text-muted"
+          >
+            このアプリについて
+          </Link>
           <Button variant="ghost" block onClick={() => void signOutUser()}>
             サインアウト
           </Button>
