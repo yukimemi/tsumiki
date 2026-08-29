@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { useUid } from "../auth/context";
 import { balanceOf, useBalances } from "../data/coins";
@@ -8,73 +8,7 @@ import { unreadEntryIds } from "../lib/unread";
 import { useHousehold } from "../household/context";
 import { BottomNav } from "./BottomNav";
 import { Avatar, CoinAmount } from "./ui";
-
-/** Inputs that open a software keyboard. A radio or a checkbox does not. */
-const TEXTUAL_INPUT: Record<string, true> = {
-  text: true,
-  search: true,
-  email: true,
-  url: true,
-  tel: true,
-  number: true,
-  password: true,
-  time: true,
-  date: true,
-};
-
-function isTextual(node: Element | null): boolean {
-  if (node instanceof HTMLTextAreaElement) return true;
-  if (node instanceof HTMLInputElement) return TEXTUAL_INPUT[node.type] === true;
-  return false;
-}
-
-/**
- * How much of the visual viewport the keyboard has to swallow before we
- * believe it. Browser chrome sliding in and out moves this by a little; a
- * software keyboard takes a third of the screen or more.
- */
-const KEYBOARD_MIN_RATIO = 0.25;
-
-/**
- * True while the software keyboard is actually covering the screen.
- *
- * This asks the visual viewport rather than asking who has focus, and that
- * distinction is the whole point. Focus is a latch: dismissing the keyboard
- * with Android's back gesture leaves the field focused, so a focus-driven
- * check stays true after the keyboard is gone and the five tabs never come
- * back — which is exactly how the nav went missing in the installed PWA.
- * Viewport height is not a latch. It reports what is on screen right now,
- * and every route back to a full-height viewport fires `resize`.
- *
- * It also fails in the safe direction: no `visualViewport`, no hiding.
- */
-function useKeyboardOpen(): boolean {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-
-    const sync = () => {
-      const hidden = window.innerHeight - viewport.height;
-      const covered = hidden > window.innerHeight * KEYBOARD_MIN_RATIO;
-      // A shrunken viewport with nothing focused is a browser-UI artefact,
-      // not a keyboard, so both have to agree before the nav stands down.
-      setOpen(covered && isTextual(document.activeElement));
-    };
-
-    viewport.addEventListener("resize", sync);
-    document.addEventListener("focusin", sync);
-    document.addEventListener("focusout", sync);
-    return () => {
-      viewport.removeEventListener("resize", sync);
-      document.removeEventListener("focusin", sync);
-      document.removeEventListener("focusout", sync);
-    };
-  }, []);
-
-  return open;
-}
+import { useKeyboardOpen } from "./useKeyboardOpen";
 
 /**
  * The phone frame: a header that never scrolls, a body that does, and the
