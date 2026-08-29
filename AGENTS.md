@@ -725,6 +725,8 @@ account at 100%.
 | Admin email allowlist | `src/lib/admin.ts` (`isAdminEmail`) + `firestore.rules` (`isAdmin()`) — two hand-written lists, not one source; edit both and `pnpm rules:deploy` |
 | The free-plan task cap (`30`) | `firestore.rules` (`taskCount < 30` on `tasks` create), `src/components/TaskEditor.tsx` (`atCap`), `src/screens/SettingsScreen.tsx` (the "30こまで" copy) — no shared constant, so a future change to the number must touch all three |
 | Free-tier ad gating | `src/components/FreeTierAd.tsx` (`plan !== "pro"` check), `src/screens/SettingsScreen.tsx` (mounted only inside the `isParent` branch), `.env.example` (`VITE_ADSENSE_CLIENT` / `VITE_ADSENSE_SLOT`) — see #36 |
+| Public routes (`/about`, `/privacy`) | `src/App.tsx` (mounted as siblings of the `/*` `AuthedApp` route, outside `AuthProvider`/`RequireAuth`) — must never gain a Firebase/household dependency, or a signed-out visitor (and any crawler) breaks |
+| `docs/terms.md` / `docs/privacy.md` markdown shape | Both parsed by `src/lib/markdownBlocks.ts` (`##` headings, `-` bullets, blank-line paragraphs only — no bold, no links) and rendered by `src/components/MarkdownBlocks.tsx`; `TermsScreen.tsx` and `PrivacyScreen.tsx` are the only two readers |
 
 ### Coins
 

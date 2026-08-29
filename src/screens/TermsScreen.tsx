@@ -3,55 +3,23 @@
 // own whether it should be showing — the gate already checked
 // UserDoc.termsVersion against CURRENT_TERMS_VERSION.
 //
-// docs/terms.md is imported as raw text rather than rendered through a
-// markdown library: the document only ever uses `##` headings, `-` bullets
-// and blank-line paragraphs, so a general-purpose renderer would be one more
+// docs/terms.md is imported as raw text and parsed by
+// src/lib/markdownBlocks.ts rather than rendered through a markdown
+// library: the document only ever uses `##` headings, `-` bullets and
+// blank-line paragraphs, so a general-purpose renderer would be one more
 // dependency for a shape this small covers completely.
 
 import { useState } from "react";
-import type { JSX, ReactNode } from "react";
+import type { JSX } from "react";
 
 import termsMd from "../../docs/terms.md?raw";
+import { MarkdownBlocks } from "../components/MarkdownBlocks";
 import { Button, Card } from "../components/ui";
+import { parseMarkdownBlocks } from "../lib/markdownBlocks";
 import { CURRENT_TERMS_VERSION } from "../lib/terms";
 import { useAction } from "./useAction";
 
-type Block =
-  | { type: "heading"; text: string }
-  | { type: "list"; items: string[] }
-  | { type: "paragraph"; text: string };
-
-/**
- * Splits on blank lines, then classifies each chunk by its first line. A
- * bullet chunk may wrap a long item onto an indented continuation line (no
- * leading "- "), which folds into the item above it rather than starting a
- * fresh one.
- */
-function parseTerms(markdown: string): Block[] {
-  const blocks: Block[] = [];
-  for (const chunk of markdown.trim().split(/\n{2,}/)) {
-    const lines = chunk.split("\n").filter((line) => line.trim().length > 0);
-    if (lines.length === 0) continue;
-    if (lines[0].startsWith("## ")) {
-      blocks.push({ type: "heading", text: lines[0].slice(3).trim() });
-      continue;
-    }
-    if (lines[0].startsWith("# ")) continue; // Title/date line, shown separately.
-    if (lines[0].startsWith("- ")) {
-      const items: string[] = [];
-      for (const line of lines) {
-        if (line.startsWith("- ")) items.push(line.slice(2).trim());
-        else items[items.length - 1] += line.trim();
-      }
-      blocks.push({ type: "list", items });
-      continue;
-    }
-    blocks.push({ type: "paragraph", text: lines.join("") });
-  }
-  return blocks;
-}
-
-const blocks = parseTerms(termsMd);
+const blocks = parseMarkdownBlocks(termsMd);
 
 export function TermsScreen({
   onAccept,
@@ -79,29 +47,7 @@ export function TermsScreen({
           if (el.scrollTop + el.clientHeight >= el.scrollHeight - 16) setRead(true);
         }}
       >
-        {blocks.map((block, i): ReactNode => {
-          if (block.type === "heading") {
-            return (
-              <h2 key={i} className="text-sm font-bold text-ink">
-                {block.text}
-              </h2>
-            );
-          }
-          if (block.type === "list") {
-            return (
-              <ul key={i} className="list-disc space-y-1 pl-5 text-sm text-muted">
-                {block.items.map((item, j) => (
-                  <li key={j}>{item}</li>
-                ))}
-              </ul>
-            );
-          }
-          return (
-            <p key={i} className="text-sm text-muted">
-              {block.text}
-            </p>
-          );
-        })}
+        <MarkdownBlocks blocks={blocks} />
       </Card>
 
       {action.error ? (

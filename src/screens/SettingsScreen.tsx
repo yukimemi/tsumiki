@@ -132,6 +132,12 @@ export function SettingsScreen() {
           >
             このアプリについて
           </Link>
+          <Link
+            to="/privacy"
+            className="min-h-tap flex items-center justify-center rounded-card border border-rule text-sm text-muted"
+          >
+            プライバシーポリシー
+          </Link>
           <Button variant="ghost" block onClick={() => void signOutUser()}>
             サインアウト
           </Button>

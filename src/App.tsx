@@ -13,6 +13,7 @@ import { AdminScreen } from "./screens/AdminScreen";
 import { CoinsScreen } from "./screens/CoinsScreen";
 import { FamilyScreen } from "./screens/FamilyScreen";
 import { OnboardingScreen } from "./screens/OnboardingScreen";
+import { PrivacyScreen } from "./screens/PrivacyScreen";
 import { RecordsScreen } from "./screens/RecordsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { TodayScreen } from "./screens/TodayScreen";
@@ -70,9 +71,9 @@ function AdminGate() {
 
 /**
  * Everything that needs a signed-in user, mounted only once the router has
- * ruled out the public `/about` route. `AuthProvider` lives here rather than
- * at the top so a signed-out visitor on `/about` — including a crawler —
- * never touches Firebase at all.
+ * ruled out the public `/about` and `/privacy` routes. `AuthProvider` lives
+ * here rather than at the top so a signed-out visitor on either route —
+ * including a crawler — never touches Firebase at all.
  */
 function AuthedApp() {
   return (
@@ -95,6 +96,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/about" element={<AboutScreen />} />
+        <Route path="/privacy" element={<PrivacyScreen />} />
         <Route path="/*" element={<AuthedApp />} />
       </Routes>
     </BrowserRouter>
