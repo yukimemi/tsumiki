@@ -113,6 +113,11 @@ export function weekKeys(anchorKey: string): string[] {
   return Array.from({ length: 7 }, (_, i) => dateKeyOf(addDays(monday, i)));
 }
 
+/** The Monday that starts `key`'s ISO week — a stable grouping key. */
+export function weekKeyOf(key: string): string {
+  return weekKeys(key)[0];
+}
+
 /**
  * Six rows of seven keys, Sunday-first, padded with the neighbouring months.
  * Always six rows: a five-row February must not make the calendar jump when

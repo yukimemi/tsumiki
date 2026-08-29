@@ -88,7 +88,9 @@ export type RepeatRule =
   | { type: "once" }
   | { type: "daily" }
   | { type: "weekly"; weekdays: number[] }  // 0=日 .. 6=土
-  | { type: "monthly"; days: number[] };    // 1..31
+  | { type: "monthly"; days: number[] }     // 1..31
+  | { type: "weeklyCount"; count: number }  // その週の中で何日にやってもよい
+  | { type: "monthlyCount"; count: number }; // その月の中で何日にやってもよい
 
 export type Household = {
   id: string;

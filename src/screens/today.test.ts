@@ -139,6 +139,80 @@ describe("todayRowsFor", () => {
     expect(sameDay[0].state).toBe("approved");
   });
 
+  it("shows a weeklyCount task on any day of the week until the quota is claimed", () => {
+    const twicePerWeek = task({ repeat: { type: "weeklyCount", count: 2 } });
+    // Nothing done yet this week (2026-08-17..2026-08-23): still due.
+    expect(rowsFor({ tasks: [twicePerWeek] })).toHaveLength(1);
+
+    // One entry earlier in the same week still leaves quota, so it stays.
+    const monday = entry("t1", "kid", "2026-08-17", "approved");
+    const withOne = rowsFor({ tasks: [twicePerWeek], entries: [monday] });
+    expect(withOne).toHaveLength(1);
+    expect(withOne[0].periodProgress).toEqual({ done: 1, count: 2 });
+
+    // Two entries this week meet the quota: hidden on a day with no entry
+    // of its own, even though `weekly` would otherwise show it every day.
+    const tuesday = entry("t1", "kid", "2026-08-18", "pending");
+    expect(
+      rowsFor({ tasks: [twicePerWeek], entries: [monday, tuesday] }),
+    ).toHaveLength(0);
+
+    // A new week resets the quota.
+    expect(
+      rowsFor({
+        tasks: [twicePerWeek],
+        entries: [monday, tuesday],
+        dateKey: "2026-08-24",
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("never marks a weeklyCount/monthlyCount task late, even paging to a past day in the still-open period", () => {
+    // TODAY is fixed at 2026-08-23 (Sunday); Wednesday 2026-08-19 is a past
+    // day but still inside the same open week, and the quota is still
+    // reachable through Sunday. `weekly`/`monthly` have real due days and
+    // stay late-able; these two don't.
+    const twicePerWeek = task({ repeat: { type: "weeklyCount", count: 2 } });
+    const wednesday = rowsFor({ tasks: [twicePerWeek], dateKey: "2026-08-19" });
+    expect(wednesday).toHaveLength(1);
+    expect(wednesday[0].state).toBe("todo");
+
+    const oncePerMonth = task({ repeat: { type: "monthlyCount", count: 1 } });
+    const earlierInMonth = rowsFor({
+      tasks: [oncePerMonth],
+      dateKey: "2026-08-02",
+    });
+    expect(earlierInMonth).toHaveLength(1);
+    expect(earlierInMonth[0].state).toBe("todo");
+  });
+
+  it("keeps a weeklyCount task visible on the day it was done, even once the quota is met", () => {
+    const oncePerWeek = task({ repeat: { type: "weeklyCount", count: 1 } });
+    const done = entry("t1", "kid", TODAY, "approved");
+    const rows = rowsFor({ tasks: [oncePerWeek], entries: [done] });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].state).toBe("approved");
+    expect(rows[0].periodProgress).toEqual({ done: 1, count: 1 });
+  });
+
+  it("scopes monthlyCount quota to the calendar month, not the week", () => {
+    const oncePerMonth = task({ repeat: { type: "monthlyCount", count: 1 } });
+    // Done earlier in August, a different week: still retires for the rest
+    // of the month.
+    const earlier = entry("t1", "kid", "2026-08-02", "approved");
+    expect(
+      rowsFor({ tasks: [oncePerMonth], entries: [earlier] }),
+    ).toHaveLength(0);
+    // September is a new month: the quota is back.
+    expect(
+      rowsFor({
+        tasks: [oncePerMonth],
+        entries: [earlier],
+        dateKey: "2026-09-01",
+      }),
+    ).toHaveLength(1);
+  });
+
   it("keeps a rejected entry actionable so the task can be redone", () => {
     const bounced = entry("t1", "kid", TODAY, "rejected");
     const rows = rowsFor({ tasks: [task()], entries: [bounced] });

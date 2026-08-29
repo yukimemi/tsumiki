@@ -4,6 +4,7 @@
 // what order. Kept pure so the rules a child lives by — what is due, what is
 // late, what a rejection means — are testable without a screen.
 
+import { monthKeyOf, weekKeyOf } from "../lib/date";
 import { isOverdue, isTaskDueOn } from "../lib/due";
 import type { Entry, Task } from "../types";
 
@@ -12,6 +13,12 @@ export type TodayRow = {
   /** The entry for this (task, member, shown day), when one exists. */
   entry: Entry | null;
   state: "todo" | "pending" | "approved" | "rejected" | "late";
+  /**
+   * Only set for `weeklyCount` / `monthlyCount` tasks: how many of the
+   * period's quota are already claimed (approved or pending), this row's
+   * own entry included.
+   */
+  periodProgress?: { done: number; count: number };
 };
 
 /**
@@ -74,13 +81,38 @@ export function todayRowsFor(input: {
     ) {
       continue;
     }
+
+    // A weeklyCount/monthlyCount task can be done on any day of its
+    // period, but only up to `count` times — same "the day it happened on
+    // stays visible, every other day doesn't come back" shape as `once`,
+    // just scoped to the period instead of forever.
+    let periodProgress: TodayRow["periodProgress"];
+    if (task.repeat.type === "weeklyCount" || task.repeat.type === "monthlyCount") {
+      const periodKeyOf = task.repeat.type === "weeklyCount" ? weekKeyOf : monthKeyOf;
+      const periodKey = periodKeyOf(dateKey);
+      const claimed = known.filter(
+        (candidate) =>
+          (candidate.status === "approved" || candidate.status === "pending") &&
+          periodKeyOf(candidate.dateKey) === periodKey,
+      ).length;
+      if (entry === null && claimed >= task.repeat.count) continue;
+      periodProgress = { done: claimed, count: task.repeat.count };
+    }
+
+    // These two have no per-day deadline — any day of the period is fine —
+    // so `isOverdue` must not run for them: a past day within a still-open
+    // period is not "late", it is just an earlier chance already taken or
+    // skipped. `periodProgress` is what tells the parent "at risk", not a
+    // late badge on every day the child didn't happen to pick.
     const state: TodayRow["state"] = entry
       ? entry.status
-      : isOverdue(task, dateKey, today, nowHm)
-        ? "late"
-        : "todo";
+      : task.repeat.type === "weeklyCount" || task.repeat.type === "monthlyCount"
+        ? "todo"
+        : isOverdue(task, dateKey, today, nowHm)
+          ? "late"
+          : "todo";
 
-    rows.push({ task, entry, state });
+    rows.push({ task, entry, state, periodProgress });
   }
 
   return rows.sort(

@@ -59,6 +59,15 @@ describe("isTaskDueOn", () => {
     expect(isTaskDueOn(task({ type: "weekly", weekdays: [] }), "2026-08-23")).toBe(false);
     expect(isTaskDueOn(task({ type: "monthly", days: [] }), "2026-08-23")).toBe(false);
   });
+
+  it("shows a weeklyCount/monthlyCount task every day, quota is enforced elsewhere", () => {
+    const weeklyCount = task({ type: "weeklyCount", count: 2 });
+    const monthlyCount = task({ type: "monthlyCount", count: 1 });
+    expect(isTaskDueOn(weeklyCount, "2026-08-17")).toBe(true);
+    expect(isTaskDueOn(weeklyCount, "2026-08-23")).toBe(true);
+    expect(isTaskDueOn(monthlyCount, "2026-08-01")).toBe(true);
+    expect(isTaskDueOn(monthlyCount, "2026-08-31")).toBe(true);
+  });
 });
 
 describe("isOverdue", () => {

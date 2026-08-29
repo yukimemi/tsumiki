@@ -44,7 +44,11 @@ export type RepeatRule =
   | { type: "once" }
   | { type: "daily" }
   | { type: "weekly"; weekdays: number[] }
-  | { type: "monthly"; days: number[] };
+  | { type: "monthly"; days: number[] }
+  // N times within the ISO week / calendar month, any day of it — the
+  // reward is capped at `count`, not tied to which day it happened on.
+  | { type: "weeklyCount"; count: number }
+  | { type: "monthlyCount"; count: number };
 
 export type RepeatType = RepeatRule["type"];
 

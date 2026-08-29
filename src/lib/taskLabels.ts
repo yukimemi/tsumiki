@@ -36,6 +36,10 @@ export function repeatLabelJa(repeat: RepeatRule): string {
         .join("・");
       return days ? `まいつき ${days}` : "まいつき";
     }
+    case "weeklyCount":
+      return `しゅうに ${repeat.count}かい`;
+    case "monthlyCount":
+      return `つきに ${repeat.count}かい`;
   }
 }
 
