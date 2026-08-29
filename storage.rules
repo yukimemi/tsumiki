@@ -5,6 +5,14 @@ rules_version = '2';
 // Uploads live under households/{householdId}/, and membership only exists in
 // Firestore, so these rules reach across services with firestore.get().
 //
+// Membership is the only gate. There used to be a second one — the global
+// `config/access` allowlist — and removing it from firestore.rules was not
+// enough: a cross-service firestore.get() runs with the storage service
+// agent's privileges and ignores Firestore's own rules, so this file kept
+// reading the sealed document and kept working. It worked only for the emails
+// that happened to still be listed there, which is every existing member and
+// no one who signs up from now on.
+//
 // One-time IAM grant required per project — without it every cross-service
 // call returns null and uploads silently 403. The console grants it when you
 // press Publish; the REST API (scripts/deploy-rules.ts, CI) does not:
@@ -22,18 +30,6 @@ service firebase.storage {
     function isSignedIn() {
       return request.auth != null
         && request.auth.token.email_verified == true;
-    }
-
-    function accessConfig() {
-      return firestore.get(/databases/(default)/documents/config/access).data;
-    }
-
-    // Same global gate as Firestore: the project is private. Stored emails are
-    // lowercased by the client, so compare against a lowercased claim.
-    function isAllowedEmail() {
-      return isSignedIn()
-        && (request.auth.token.email.lower() in accessConfig().get('allowedEmails', [])
-            || request.auth.token.email.lower() in accessConfig().get('adminEmails', []));
     }
 
     function household(householdId) {
@@ -61,24 +57,22 @@ service firebase.storage {
     // attempt to fill the bucket.
     match /households/{householdId}/entries/{entryId}/{file} {
       allow read: if isMember(householdId);
-      allow create, update: if isAllowedEmail()
-        && isMember(householdId)
+      allow create, update: if isMember(householdId)
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
       // Undo removes the photo with the completion, so a member has to be able
       // to delete their own. `request.resource` is null on delete, which is
       // why this is a separate rule.
-      allow delete: if isAllowedEmail() && isMember(householdId);
+      allow delete: if isMember(householdId);
     }
 
     // Anything else under a household stays parent-only.
     match /households/{householdId}/{allPaths=**} {
       allow read: if isMember(householdId);
-      allow create, update: if isAllowedEmail()
-        && isParent(householdId)
+      allow create, update: if isParent(householdId)
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
-      allow delete: if isAllowedEmail() && isParent(householdId);
+      allow delete: if isParent(householdId);
     }
   }
 }
