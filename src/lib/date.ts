@@ -12,7 +12,7 @@
  * and `date-fns` can be used directly on them.
  */
 
-import { addDays, format } from "date-fns";
+import { addDays, endOfMonth, format } from "date-fns";
 
 export const TOKYO = "Asia/Tokyo";
 
@@ -87,6 +87,17 @@ export function dayOfMonthKey(key: string): number {
 
 export function monthKeyOf(key: string): string {
   return key.slice(0, 7);
+}
+
+/**
+ * The real last day of `monthKey`'s month — "2026-02-28", never
+ * "2026-02-31". Callers that only ever compare date keys as strings can get
+ * away with a fixed `-31` bound (lexicographic order still works), but
+ * anything that parses the bound into a real `Date` — a Firestore Timestamp
+ * range, say — must not: `parseDateKey("2026-02-31")` normalizes to March 3.
+ */
+export function lastDayOfMonthKey(monthKey: string): string {
+  return dateKeyOf(endOfMonth(parseDateKey(`${monthKey}-01`)));
 }
 
 /** "8月23日(日)" */

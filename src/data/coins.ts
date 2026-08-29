@@ -19,6 +19,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
   writeBatch,
@@ -26,6 +27,7 @@ import {
   type WriteBatch,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { addDaysKey, parseDateKey } from "../lib/date";
 import { balanceId } from "../lib/ids";
 import type { Balance, LedgerEntry, LedgerReason, Live, Payout } from "../types";
 import { useLiveDocs } from "./live";
@@ -109,6 +111,33 @@ export function useLedger(
       : null,
     (d) => ({ ...(d.data() as Omit<LedgerEntry, "id">), id: d.id }),
     [householdId, memberId ?? "", max],
+  );
+}
+
+/**
+ * Ledger rows whose `createdAt` falls within `[fromKey, toKey]`, inclusive —
+ * the ledger-side counterpart of `useEntriesInRange`. Needed because a
+ * parent's bonus grant or correction never becomes an `Entry`, so the
+ * week/month ranking board (built from entries) would otherwise never see it
+ * even though the lifetime board reads it straight off `Balance.earned`.
+ */
+export function useLedgerInRange(
+  householdId: string | null,
+  fromKey: string,
+  toKey: string,
+): Live<LedgerEntry[]> {
+  return useLiveDocs<LedgerEntry>(
+    householdId
+      ? () =>
+          query(
+            collection(db(), LEDGER),
+            where("householdId", "==", householdId),
+            where("createdAt", ">=", Timestamp.fromDate(parseDateKey(fromKey))),
+            where("createdAt", "<", Timestamp.fromDate(parseDateKey(addDaysKey(toKey, 1)))),
+          )
+      : null,
+    (d) => ({ ...(d.data() as Omit<LedgerEntry, "id">), id: d.id }),
+    [householdId, fromKey, toKey],
   );
 }
 
