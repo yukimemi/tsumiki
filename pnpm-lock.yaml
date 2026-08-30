@@ -88,7 +88,7 @@ importers:
         specifier: ^8.68.0
         version: 8.68.0(eslint@10.9.1(jiti@1.21.7)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
       vercel:
-        specifier: ^59.6.2
+        specifier: ^59.7.0
         version: 59.9.1(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(rollup@4.62.5)(supports-color@7.2.0)
       vite:
         specifier: ^8.2.2
