@@ -5,6 +5,7 @@ import { useAuth } from "../auth/context";
 import { useUid } from "../auth/context";
 import { AppearanceSettings } from "../components/AppearanceSettings";
 import { FreeTierAd } from "../components/FreeTierAd";
+import { InstallPwaCard } from "../components/InstallPwaCard";
 import { InviteForm } from "../components/InviteForm";
 import { MemberIdentity } from "../components/MemberIdentity";
 import { MemberSettings } from "../components/MemberSettings";
@@ -122,6 +123,8 @@ export function SettingsScreen() {
         <h2 className="mb-3 text-base font-bold text-ink">みため</h2>
         <AppearanceSettings />
       </Card>
+
+      <InstallPwaCard />
 
       <Card>
         <h2 className="mb-3 text-base font-bold text-ink">そのほか</h2>
