@@ -32,7 +32,7 @@ import type { SegmentedOption } from "./ui";
  * weekly task with no weekday would simply never appear on any day.
  */
 
-/** A dozen is what fits two thumb-sized rows without scrolling. */
+/** A baker's dozen still fits three thumb-sized rows without scrolling. */
 const EMOJI_CHOICES: readonly string[] = [
   "🧹",
   "🍽️",
@@ -46,6 +46,7 @@ const EMOJI_CHOICES: readonly string[] = [
   "🚮",
   "🧱",
   "⭐",
+  "💪",
 ];
 
 const MAX_COIN = 999;
@@ -197,6 +198,17 @@ function messageOf(error: unknown): string | undefined {
     return typeof error.message === "string" ? error.message : undefined;
   }
   return undefined;
+}
+
+/**
+ * Custom emoji input takes free text but the field is one emoji, not a
+ * caption — `Intl.Segmenter` finds the first grapheme cluster so a pasted
+ * skin-tone/ZWJ sequence (👨‍👩‍👧, 👍🏽) survives instead of being cut mid-codepoint.
+ */
+function firstGrapheme(value: string): string {
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  const [first] = segmenter.segment(value);
+  return first?.segment ?? "";
 }
 
 function valuesOf(task: Task | null): FormValues {
@@ -452,23 +464,33 @@ function TaskForm(props: {
       <Controller
         control={control}
         name="emoji"
-        render={({ field }) => (
-          <Field label="えもじ" error={messageOf(errors.emoji)} group>
-            <div className="flex flex-wrap gap-2">
-              {EMOJI_CHOICES.map((emoji) => (
-                <Chip
-                  key={emoji}
-                  tone="self"
-                  selected={field.value === emoji}
-                  onClick={() => field.onChange(emoji)}
-                  className="text-2xl"
-                >
-                  <span aria-hidden="true">{emoji}</span>
-                </Chip>
-              ))}
-            </div>
-          </Field>
-        )}
+        render={({ field }) => {
+          const isCustom = field.value !== "" && !EMOJI_CHOICES.includes(field.value);
+          return (
+            <Field label="えもじ" error={messageOf(errors.emoji)} group>
+              <div className="flex flex-wrap items-center gap-2">
+                {EMOJI_CHOICES.map((emoji) => (
+                  <Chip
+                    key={emoji}
+                    tone="self"
+                    selected={field.value === emoji}
+                    onClick={() => field.onChange(emoji)}
+                    className="text-2xl"
+                  >
+                    <span aria-hidden="true">{emoji}</span>
+                  </Chip>
+                ))}
+                <Input
+                  value={isCustom ? field.value : ""}
+                  onChange={(e) => field.onChange(firstGrapheme(e.target.value))}
+                  placeholder="ほかの えもじ"
+                  aria-label="ほかの えもじを にゅうりょく"
+                  className={`w-24 text-center text-2xl${isCustom ? " border-current" : ""}`}
+                />
+              </div>
+            </Field>
+          );
+        }}
       />
 
       <Controller
