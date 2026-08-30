@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { createTask, updateTask } from "../data/tasks";
 import type { TaskDraft, TaskPatch } from "../data/tasks";
-import { WEEKDAY_LABELS_JA } from "../lib/date";
+import { WEEKDAY_LABELS_JA, todayKey } from "../lib/date";
 import { UNFILED_LABEL } from "../screens/today";
 import { useAction } from "../screens/useAction";
 import type { MemberInfo, RepeatRule, RepeatType, Role, Task } from "../types";
@@ -114,6 +114,12 @@ const schema = z
     weekdays: z.array(z.number().int().min(0).max(6)),
     monthDays: z.array(z.number().int().min(1).max(31)),
     periodCount: z.number().int().min(1, "1いじょうに してね"),
+    dueDate: z
+      .string()
+      .refine(
+        (value) => value === "" || /^\d{4}-\d{2}-\d{2}$/.test(value),
+        "ひづけの かきかたが ちがいます",
+      ),
     dueTime: z
       .string()
       .refine(
@@ -231,6 +237,7 @@ function valuesOf(task: Task | null): FormValues {
       repeat.type === "weeklyCount" || repeat.type === "monthlyCount"
         ? repeat.count
         : 1,
+    dueDate: task?.dueDate ?? "",
     dueTime: task?.dueTime ?? "",
     note: task?.note ?? "",
   };
@@ -263,6 +270,9 @@ function draftOf(values: FormValues, members: Member[]): TaskDraft {
     // Someone who has left the household must not keep owning a chore.
     assigneeIds: values.assigneeIds.filter((uid) => known.has(uid)),
     repeat: repeatOf(values),
+    // A calendar deadline only makes sense for a one-off; switching a task
+    // away from "once" must not leave a stale date behind it.
+    dueDate: values.repeatType === "once" ? values.dueDate : "",
     dueTime: values.dueTime,
     note: values.note.trim(),
   };
@@ -749,6 +759,21 @@ function TaskForm(props: {
             );
           }}
         />
+      ) : null}
+
+      {repeatType === "once" ? (
+        <Field
+          label="きげん"
+          hint="このひを すぎると おくれている ひょうじに なります"
+          error={errors.dueDate?.message}
+        >
+          <Input
+            type="date"
+            min={todayKey()}
+            {...register("dueDate")}
+            className="w-40"
+          />
+        </Field>
       ) : null}
 
       <Field

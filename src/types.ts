@@ -128,6 +128,14 @@ export type Task = {
   /** Empty means anyone in the household may do it. */
   assigneeIds: string[];
   repeat: RepeatRule;
+  /**
+   * "YYYY-MM-DD" in Asia/Tokyo. A hard calendar deadline, distinct from
+   * `dueTime`'s same-day clock cutoff — meant for a one-off task that has to
+   * happen by a specific date ("宿題を金曜までに"), not a daily nag. Once
+   * this date has passed with no entry, `isOverdue` (`src/lib/due.ts`) marks
+   * the task late every day after, same as a task with no schedule at all.
+   */
+  dueDate?: string;
   /** "HH:mm" in Asia/Tokyo. Past this time an undone task counts as late. */
   dueTime?: string;
   order: number;

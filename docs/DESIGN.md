@@ -126,6 +126,7 @@ export type Task = {
   needsApproval: boolean;
   assigneeIds: string[];                 // [] = かぞくの誰でも
   repeat: RepeatRule;
+  dueDate?: string;                      // "YYYY-MM-DD" 期限。「1かいだけ」用
   dueTime?: string;                      // "HH:mm"
   order: number;
   archived: boolean;

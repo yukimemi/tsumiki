@@ -30,8 +30,15 @@ export function isTaskDueOn(task: Task, dateKey: string): boolean {
 }
 
 /**
- * Past days are always late. Today is late only after `dueTime` has passed;
- * exactly at `dueTime` there is still time to do it.
+ * Past days are always late. Today's lateness depends on which deadline the
+ * task carries:
+ *
+ * - `dueDate` past today: late regardless of `dueTime` — the calendar
+ *   deadline itself has been missed, not just a same-day cutoff.
+ * - `dueDate` still ahead of today: never late yet, even if `dueTime`'s
+ *   clock has passed — the clock cutoff only applies on the deadline day.
+ * - `dueDate` is today, or absent entirely: falls through to the `dueTime`
+ *   check, exactly as before this field existed.
  */
 export function isOverdue(
   task: Task,
@@ -41,6 +48,8 @@ export function isOverdue(
 ): boolean {
   if (dateKey < todayKeyValue) return true;
   if (dateKey !== todayKeyValue) return false;
+  if (task.dueDate && todayKeyValue > task.dueDate) return true;
+  if (task.dueDate && todayKeyValue < task.dueDate) return false;
   if (!task.dueTime) return false;
   return nowHmValue > task.dueTime;
 }

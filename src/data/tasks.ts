@@ -136,18 +136,22 @@ export async function createTask(
  * who set a due time could never take it off again.
  */
 export type TaskPatch = Partial<
-  Omit<TaskDraft, "dueTime" | "note" | "category">
+  Omit<TaskDraft, "dueTime" | "dueDate" | "note" | "category">
 > & {
   dueTime?: string | null;
+  dueDate?: string | null;
   note?: string | null;
   category?: string | null;
 };
 
 export async function updateTask(id: string, patch: TaskPatch): Promise<void> {
-  const { dueTime, note, category, ...rest } = patch;
+  const { dueTime, dueDate, note, category, ...rest } = patch;
   const payload: Record<string, unknown> = forMerge(rest);
   if (dueTime !== undefined) {
     payload.dueTime = dueTime === null || dueTime === "" ? deleteField() : dueTime;
+  }
+  if (dueDate !== undefined) {
+    payload.dueDate = dueDate === null || dueDate === "" ? deleteField() : dueDate;
   }
   if (note !== undefined) {
     payload.note = note === null || note === "" ? deleteField() : note;
