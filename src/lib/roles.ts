@@ -3,7 +3,13 @@
  * firestore.rules cannot drift apart in more than one place.
  */
 
-import type { Household, MemberInfo, Role } from "../types";
+import {
+  MEMBER_COLORS,
+  type Household,
+  type MemberColor,
+  type MemberInfo,
+  type Role,
+} from "../types";
 
 export const ROLE_LABELS_JA: Record<Role, string> = {
   owner: "おや(かんりにん)",
@@ -45,4 +51,13 @@ export function memberOf(household: Household | null, uid: string): MemberInfo |
 
 export function displayNameOf(household: Household | null, uid: string): string {
   return memberOf(household, uid)?.displayName || "だれか";
+}
+
+/** First colour nobody in this household is using, so avatars stay distinct. */
+export function freeMemberColor(
+  memberInfo: Record<string, MemberInfo> | undefined,
+): MemberColor {
+  const taken = new Set<MemberColor>();
+  for (const info of Object.values(memberInfo ?? {})) taken.add(info.color);
+  return MEMBER_COLORS.find((c) => !taken.has(c)) ?? MEMBER_COLORS[0];
 }

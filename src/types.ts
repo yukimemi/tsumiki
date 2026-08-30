@@ -35,6 +35,11 @@ export type MemberInfo = {
   photoURL?: string;
   color: MemberColor;
   emoji: string;
+  /** True for a member with no device/Google account of their own — added
+   *  directly by a parent instead of via email invite + claim. Never signs
+   *  in itself; every write on its behalf goes through a parent's own auth
+   *  (see `firestore.rules`' `isParent` fallbacks). */
+  isVirtual?: boolean;
 };
 
 /** 0 = Sunday .. 6 = Saturday, matching `Date.prototype.getDay`. */

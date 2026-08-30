@@ -34,3 +34,12 @@ export function encodeEmailKey(email: string): string {
 export function decodeEmailKey(key: string): string {
   return key.replace(/%2E/g, ".");
 }
+
+/**
+ * Id for a member with no device of their own. Deliberately not shaped like a
+ * Firebase Auth uid (prefixed, contains no `SEP`), so it can never collide
+ * with one and never accidentally parses as part of an entry/balance id.
+ */
+export function virtualMemberId(): string {
+  return `virtual-${crypto.randomUUID()}`;
+}

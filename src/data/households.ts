@@ -6,6 +6,7 @@
 import {
   addDoc,
   arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   deleteField,
@@ -19,6 +20,7 @@ import {
 } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "../lib/firebase";
+import { virtualMemberId } from "../lib/ids";
 import type { Household, Live, MemberInfo, Role } from "../types";
 import { useLiveDocs } from "./live";
 import { clean, forMerge, forWrite } from "./sanitise";
@@ -94,6 +96,29 @@ export async function setMemberRole(
     [`memberRoles.${uid}`]: role,
     updatedAt: serverTimestamp(),
   });
+}
+
+/**
+ * A child with no device or Google account of their own. Skips the
+ * invite/claim dance entirely: a parent adds them directly, and every write
+ * on their behalf goes through the parent's own auth (`firestore.rules`'
+ * `isParent` fallbacks on entries/ledger/payouts). Always joins as `child` —
+ * a role nobody could ever sign in to exercise as `parent`/`owner` would be
+ * a dead end, not a privilege.
+ */
+export async function addVirtualMember(
+  household: Household,
+  info: Pick<MemberInfo, "displayName" | "color" | "emoji">,
+): Promise<string> {
+  const id = virtualMemberId();
+  const member: MemberInfo = { ...info, isVirtual: true };
+  await updateDoc(doc(db(), COL, household.id), {
+    memberIds: arrayUnion(id),
+    [`memberRoles.${id}`]: "child",
+    [`memberInfo.${id}`]: clean(member),
+    updatedAt: serverTimestamp(),
+  });
+  return id;
 }
 
 /** Field paths, not a whole-map write: two parents editing at once must not

@@ -26,13 +26,8 @@ import {
 import type { User } from "firebase/auth";
 import { db } from "../lib/firebase";
 import { encodeEmailKey } from "../lib/ids";
-import {
-  MEMBER_COLORS,
-  type Household,
-  type MemberColor,
-  type MemberInfo,
-  type Role,
-} from "../types";
+import { freeMemberColor } from "../lib/roles";
+import type { Household, MemberInfo, Role } from "../types";
 import { clean } from "./sanitise";
 
 const COL = "households";
@@ -73,13 +68,6 @@ export async function cancelEmailInvite(
   });
 }
 
-/** First colour nobody in this household is using, so avatars stay distinct. */
-function freeColor(memberInfo: Record<string, MemberInfo> | undefined): MemberColor {
-  const taken = new Set<MemberColor>();
-  for (const info of Object.values(memberInfo ?? {})) taken.add(info.color);
-  return MEMBER_COLORS.find((c) => !taken.has(c)) ?? MEMBER_COLORS[0];
-}
-
 /**
  * Invitee side, run on every sign-in. Turns each pending invite into real
  * membership. Unverified addresses are skipped: the rules require a verified
@@ -109,7 +97,7 @@ export async function claimEmailInvites(user: User): Promise<void> {
       displayName: user.displayName ?? email.split("@")[0],
       email,
       photoURL: user.photoURL ?? undefined,
-      color: freeColor(data.memberInfo),
+      color: freeMemberColor(data.memberInfo),
       emoji: DEFAULT_EMOJI,
     };
     await updateDoc(d.ref, {
