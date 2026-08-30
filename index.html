@@ -26,6 +26,16 @@
       href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap"
       rel="stylesheet"
     />
+    <!-- AdSense site-ownership verification, not the in-app ad unit — that
+         one waits on approval and lives behind FreeTierAd's env-gated
+         VITE_ADSENSE_CLIENT/VITE_ADSENSE_SLOT (see #36/#38). This tag just
+         has to be present in every page's <head> for the crawler to find
+         it; the publisher id is public by design, not a secret. -->
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9934080275723655"
+      crossorigin="anonymous"
+    ></script>
     <title>tsumiki</title>
   </head>
   <body>
