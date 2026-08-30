@@ -101,3 +101,26 @@ describe("TaskEditor emoji field", () => {
     expect(custom.value).toBe("");
   });
 });
+
+describe("TaskEditor deadline field", () => {
+  // Field concatenates its hint text into the wrapping <label>, so the
+  // accessible name is "きげんこのひを すぎると…", not the bare "きげん" —
+  // exact: false matches the substring instead of assuming there is no hint.
+  it("does not show for the default recurring cadence", () => {
+    renderEditor();
+    expect(screen.queryByLabelText("きげん", { exact: false })).toBeNull();
+  });
+
+  it("shows once '1かいだけ' is picked", () => {
+    renderEditor();
+    fireEvent.click(screen.getByRole("radio", { name: "1かいだけ" }));
+    expect(screen.getByLabelText("きげん", { exact: false })).toBeTruthy();
+  });
+
+  it("hides again once a recurring cadence is picked back", () => {
+    renderEditor();
+    fireEvent.click(screen.getByRole("radio", { name: "1かいだけ" }));
+    fireEvent.click(screen.getByRole("radio", { name: "まいにち" }));
+    expect(screen.queryByLabelText("きげん", { exact: false })).toBeNull();
+  });
+});

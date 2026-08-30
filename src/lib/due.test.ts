@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { RepeatRule, Task } from "../types";
 import { isOverdue, isTaskDueOn } from "./due";
 
-function task(repeat: RepeatRule, dueTime?: string): Task {
+function task(repeat: RepeatRule, dueTime?: string, dueDate?: string): Task {
   return {
     id: "t1",
     householdId: "h1",
@@ -13,6 +13,7 @@ function task(repeat: RepeatRule, dueTime?: string): Task {
     assigneeIds: [],
     repeat,
     dueTime,
+    dueDate,
     order: 0,
     archived: false,
     createdBy: "u1",
@@ -101,5 +102,28 @@ describe("isOverdue", () => {
     const morning = task({ type: "daily" }, "09:00");
     expect(isOverdue(morning, "2026-08-23", "2026-08-23", "08:30")).toBe(false);
     expect(isOverdue(morning, "2026-08-23", "2026-08-23", "10:00")).toBe(true);
+  });
+});
+
+describe("isOverdue with dueDate", () => {
+  const once = task({ type: "once" }, undefined, "2026-08-25");
+  const onceWithClock = task({ type: "once" }, "19:00", "2026-08-25");
+
+  it("is not late before the deadline date, even past any due time that day", () => {
+    expect(isOverdue(once, "2026-08-23", "2026-08-23", "23:59")).toBe(false);
+  });
+
+  it("is late every day after the deadline date has passed", () => {
+    expect(isOverdue(once, "2026-08-26", "2026-08-26", "00:00")).toBe(true);
+    expect(isOverdue(once, "2026-09-01", "2026-09-01", "00:00")).toBe(true);
+  });
+
+  it("on the deadline day itself, falls through to the due-time cutoff", () => {
+    expect(isOverdue(onceWithClock, "2026-08-25", "2026-08-25", "18:59")).toBe(false);
+    expect(isOverdue(onceWithClock, "2026-08-25", "2026-08-25", "19:01")).toBe(true);
+  });
+
+  it("on the deadline day with no due time, is not late until the next day", () => {
+    expect(isOverdue(once, "2026-08-25", "2026-08-25", "23:59")).toBe(false);
   });
 });
