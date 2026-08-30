@@ -169,12 +169,14 @@ export function FamilyScreen(): JSX.Element {
       </Card>
 
       <div className="space-y-2">
-        <SegmentedControl
-          value={memberFilter}
-          options={memberOptions}
-          onChange={setMemberFilter}
-          label="だれの きろくを みるか"
-        />
+        <div className="overflow-x-auto pb-1">
+          <SegmentedControl
+            value={memberFilter}
+            options={memberOptions}
+            onChange={setMemberFilter}
+            label="だれの きろくを みるか"
+          />
+        </div>
         <SegmentedControl<StatusFilter>
           value={statusFilter}
           options={STATUS_OPTIONS}
