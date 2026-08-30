@@ -107,6 +107,7 @@ export function CoinsScreen(): JSX.Element {
   const [rejectReason, setRejectReason] = useState("");
 
   const [payoutOpen, setPayoutOpen] = useState(false);
+  const [payoutMemberId, setPayoutMemberId] = useState("");
   const [payoutDraft, setPayoutDraft] = useState(1);
   const [payoutNote, setPayoutNote] = useState("");
 
@@ -154,9 +155,23 @@ export function CoinsScreen(): JSX.Element {
     (payout) => payout.status !== "requested",
   );
 
+  // Always your own room to exchange, independent of whichever member the
+  // sheet below is currently targeting.
+  const selfPlan = payoutPlan({
+    balanceCoins: myCoins,
+    coinYen,
+    minYen: household?.payoutMinYen,
+    stepYen: household?.payoutStepYen,
+  });
+
+  // A parent may open the sheet for another member (a device-less child
+  // cannot request their own exchange); anyone else always requests for
+  // themselves regardless of what state is left over from a previous open.
+  const payoutMember = isParent && payoutMemberId ? payoutMemberId : uid;
+  const payoutBalanceCoins = balanceOf(balances.data, payoutMember)?.coins ?? 0;
   // Clamped during render: the balance moves under the sheet while it is open.
   const plan = payoutPlan({
-    balanceCoins: myCoins,
+    balanceCoins: payoutBalanceCoins,
     coinYen,
     minYen: household?.payoutMinYen,
     stepYen: household?.payoutStepYen,
@@ -196,7 +211,7 @@ export function CoinsScreen(): JSX.Element {
     const ok = await payoutAction.run(() =>
       requestPayout({
         householdId,
-        memberId: uid,
+        memberId: payoutMember,
         coins: payoutCoins,
         coinYen,
         note: payoutNote.trim() || undefined,
@@ -204,6 +219,7 @@ export function CoinsScreen(): JSX.Element {
     );
     if (!ok) return;
     setPayoutOpen(false);
+    setPayoutMemberId("");
     setPayoutDraft(1);
     setPayoutNote("");
   };
@@ -407,20 +423,46 @@ export function CoinsScreen(): JSX.Element {
           <Skeleton rows={3} className="mt-3" />
         ) : (
           <ul className="mt-2 space-y-2">
-            {board.map(({ member, coins }) => (
-              <li key={member.uid} className="flex items-center gap-3">
-                <Avatar info={member.info} size="sm" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-ink">
-                    {member.info.displayName}
-                  </p>
-                  {member.uid === uid ? (
-                    <Badge tone="self">あなた</Badge>
+            {board.map(({ member, coins }) => {
+              const rowPlan = payoutPlan({
+                balanceCoins: coins,
+                coinYen,
+                minYen: household?.payoutMinYen,
+                stepYen: household?.payoutStepYen,
+              });
+              return (
+                <li key={member.uid} className="flex items-center gap-3">
+                  <Avatar info={member.info} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-ink">
+                      {member.info.displayName}
+                    </p>
+                    {member.uid === uid ? (
+                      <Badge tone="self">あなた</Badge>
+                    ) : member.info.isVirtual ? (
+                      <Badge>デバイスなし</Badge>
+                    ) : null}
+                  </div>
+                  <CoinAmount coins={coins} yen={coins * coinYen} size="sm" />
+                  {/* A parent can request an exchange for anyone — the only
+                      way a device-less member ever gets to spend coins. */}
+                  {isParent && member.uid !== uid ? (
+                    <Button
+                      variant="ghost"
+                      size="md"
+                      disabled={!rowPlan.canRequest}
+                      onClick={() => {
+                        setPayoutMemberId(member.uid);
+                        setPayoutDraft(rowPlan.minCoins);
+                        setPayoutOpen(true);
+                      }}
+                    >
+                      こうかん
+                    </Button>
                   ) : null}
-                </div>
-                <CoinAmount coins={coins} yen={coins * coinYen} size="sm" />
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
@@ -444,18 +486,19 @@ export function CoinsScreen(): JSX.Element {
           variant="coin"
           block
           className="mt-3"
-          disabled={!plan.canRequest}
+          disabled={!selfPlan.canRequest}
           onClick={() => {
-            setPayoutDraft(plan.minCoins);
+            setPayoutMemberId("");
+            setPayoutDraft(selfPlan.minCoins);
             setPayoutOpen(true);
           }}
         >
           こうかんを おねがいする
         </Button>
-        {!plan.canRequest ? (
+        {!selfPlan.canRequest ? (
           <p className="mt-2 text-sm text-muted">
             {household?.payoutMinYen
-              ? `あと ${Math.max(0, plan.minCoins - myCoins)}コインで こうかんできるよ`
+              ? `あと ${Math.max(0, selfPlan.minCoins - myCoins)}コインで こうかんできるよ`
               : "コインが たまったら かえられます"}
           </p>
         ) : null}
@@ -555,7 +598,10 @@ export function CoinsScreen(): JSX.Element {
 
       <Sheet
         open={payoutOpen}
-        onClose={() => setPayoutOpen(false)}
+        onClose={() => {
+          setPayoutOpen(false);
+          setPayoutMemberId("");
+        }}
         title="おこづかいに かえる"
         footer={
           <Button
@@ -569,6 +615,24 @@ export function CoinsScreen(): JSX.Element {
         }
       >
         <div className="space-y-4">
+          {isParent ? (
+            <Field label="だれの コイン">
+              <Select
+                value={payoutMember}
+                onChange={(event) => {
+                  setPayoutMemberId(event.target.value);
+                  setPayoutDraft(1);
+                }}
+              >
+                {members.map((member) => (
+                  <option key={member.uid} value={member.uid}>
+                    {member.info.displayName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+
           <Field label="なんコイン かえる？" group>
             <div className="flex items-center justify-center gap-4">
               <IconButton

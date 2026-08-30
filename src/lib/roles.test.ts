@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
-import type { Household } from "../types";
+import { MEMBER_COLORS, type Household, type MemberInfo } from "../types";
 import {
   ROLE_LABELS_JA,
   canApprove,
   canManageMembers,
   canManageTasks,
   displayNameOf,
+  freeMemberColor,
   isOwner,
   isParent,
   memberOf,
@@ -113,5 +114,30 @@ describe("ROLE_LABELS_JA", () => {
     expect(ROLE_LABELS_JA.owner).toBe("おや(かんりにん)");
     expect(ROLE_LABELS_JA.parent).toBe("おや");
     expect(ROLE_LABELS_JA.child).toBe("こども");
+  });
+});
+
+describe("freeMemberColor", () => {
+  it("picks the first colour nobody in the household is using", () => {
+    const memberInfo: Record<string, MemberInfo> = {
+      a: { displayName: "a", color: "sakura", emoji: "🐰" },
+      b: { displayName: "b", color: "sora", emoji: "🐻" },
+    };
+    expect(freeMemberColor(memberInfo)).toBe("wakaba");
+  });
+
+  it("returns the first colour when nobody has one yet", () => {
+    expect(freeMemberColor(undefined)).toBe(MEMBER_COLORS[0]);
+    expect(freeMemberColor({})).toBe(MEMBER_COLORS[0]);
+  });
+
+  it("wraps back to the first colour once every slot is taken", () => {
+    const memberInfo: Record<string, MemberInfo> = Object.fromEntries(
+      MEMBER_COLORS.map((color, index) => [
+        `member-${index}`,
+        { displayName: `member-${index}`, color, emoji: "🐰" },
+      ]),
+    );
+    expect(freeMemberColor(memberInfo)).toBe(MEMBER_COLORS[0]);
   });
 });

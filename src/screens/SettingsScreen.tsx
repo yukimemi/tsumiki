@@ -10,6 +10,7 @@ import { InviteForm } from "../components/InviteForm";
 import { MemberIdentity } from "../components/MemberIdentity";
 import { MemberSettings } from "../components/MemberSettings";
 import { TaskManager } from "../components/TaskManager";
+import { VirtualMemberForm } from "../components/VirtualMemberForm";
 import {
   Badge,
   Button,
@@ -93,8 +94,9 @@ export function SettingsScreen() {
           isOwner={isOwner}
         />
         {isParent ? (
-          <div className="mt-4 border-t border-rule pt-4">
+          <div className="mt-4 space-y-4 border-t border-rule pt-4">
             <InviteForm household={household} />
+            <VirtualMemberForm household={household} />
           </div>
         ) : null}
       </Card>

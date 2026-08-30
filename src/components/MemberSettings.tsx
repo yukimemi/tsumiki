@@ -93,6 +93,10 @@ export function MemberSettings({
                     <span className="block truncate text-xs text-muted">
                       {member.info.email}
                     </span>
+                  ) : member.info.isVirtual ? (
+                    <span className="block truncate text-xs text-muted">
+                      デバイスなし
+                    </span>
                   ) : null}
                 </span>
                 <Badge>{ROLE_LABELS_JA[member.role]}</Badge>
@@ -104,7 +108,9 @@ export function MemberSettings({
                     aria-label={`${member.info.displayName} の やくわり`}
                     className="w-auto"
                     value={member.role}
-                    disabled={isTargetOwner || action.busy}
+                    disabled={
+                      isTargetOwner || member.info.isVirtual || action.busy
+                    }
                     onChange={(event) => {
                       const next = event.target.value;
                       if (isAssignable(next)) changeRole(member.uid, next);
@@ -146,8 +152,11 @@ export function MemberSettings({
           <>
             {removing?.info.displayName}
             {
-              " は もう この かぞくの やることが できなくなって、この アプリで かぞくを みられなくなるよ。いままでの きろくと コインは かぞくの れきしに のこるよ。また あとから メールで さそえるよ。"
+              " は もう この かぞくの やることが できなくなって、この アプリで かぞくを みられなくなるよ。いままでの きろくと コインは かぞくの れきしに のこるよ。"
             }
+            {removing?.info.isVirtual
+              ? "また あとから ついかできるよ。"
+              : "また あとから メールで さそえるよ。"}
           </>
         }
         confirmLabel="はずす"
