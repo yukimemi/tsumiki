@@ -3,7 +3,7 @@
   "private": true,
   "description": "Detaches this project's billing account when its budget is exceeded.",
   "main": "index.js",
-  "engines": { "node": ">=22.23.2" },
+  "engines": { "node": ">=24.20.0" },
   "dependencies": {
     "@google-cloud/billing": "^6.0.0",
     "@google-cloud/functions-framework": "^5.0.5"
