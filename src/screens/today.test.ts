@@ -281,6 +281,22 @@ describe("todayRowsFor", () => {
     expect(rows[0].state).toBe("rejected");
     expect(rows[0].entry).toBe(second);
   });
+
+  it("surfaces a rejected slot even when a newer slot is still pending", () => {
+    // The approval queue is oldest-first, but a parent can decide any
+    // pending entry first: the earlier slot can end up rejected while a
+    // later one is still pending.
+    const pushups = task({ repeat: { type: "daily" }, dailyLimit: 3 });
+    const first = entry("t1", "kid", TODAY, "rejected");
+    const second = {
+      ...entry("t1", "kid", TODAY, "pending"),
+      id: "t1__kid__2026-08-23__2",
+    };
+    const rows = rowsFor({ tasks: [pushups], entries: [first, second] });
+    expect(rows[0].state).toBe("rejected");
+    expect(rows[0].entry).toBe(first);
+    expect(rows[0].dailyProgress).toEqual({ done: 1, count: 3 });
+  });
 });
 describe("progressOf with a dailyLimit task", () => {
   it("sums coins across every entry banked today, even before the row itself is done", () => {
