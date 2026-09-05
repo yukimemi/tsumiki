@@ -248,6 +248,68 @@ describe("todayRowsFor", () => {
       "approved",
     ]);
   });
+
+  it("keeps a dailyLimit task tappable again below its allowance", () => {
+    const pushups = task({ repeat: { type: "daily" }, dailyLimit: 3, coin: 2 });
+    const done = entry("t1", "kid", TODAY, "approved", 2);
+    const rows = rowsFor({ tasks: [pushups], entries: [done] });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].state).toBe("todo");
+    expect(rows[0].entries).toEqual([done]);
+    expect(rows[0].entry).toBe(done);
+    expect(rows[0].dailyProgress).toEqual({ done: 1, count: 3 });
+  });
+
+  it("freezes a dailyLimit task once the allowance is spent", () => {
+    const pushups = task({ repeat: { type: "daily" }, dailyLimit: 2, coin: 2 });
+    const first = entry("t1", "kid", TODAY, "approved", 2);
+    const second = { ...entry("t1", "kid", TODAY, "approved", 2), id: "t1__kid__2026-08-23__2" };
+    const rows = rowsFor({ tasks: [pushups], entries: [first, second] });
+    expect(rows[0].state).toBe("approved");
+    expect(rows[0].entries).toHaveLength(2);
+    expect(rows[0].dailyProgress).toEqual({ done: 2, count: 2 });
+  });
+
+  it("still lets a rejected dailyLimit completion be redone ahead of anything else", () => {
+    const pushups = task({ repeat: { type: "daily" }, dailyLimit: 3 });
+    const first = entry("t1", "kid", TODAY, "approved");
+    const second = {
+      ...entry("t1", "kid", TODAY, "rejected"),
+      id: "t1__kid__2026-08-23__2",
+    };
+    const rows = rowsFor({ tasks: [pushups], entries: [first, second] });
+    expect(rows[0].state).toBe("rejected");
+    expect(rows[0].entry).toBe(second);
+  });
+
+  it("surfaces a rejected slot even when a newer slot is still pending", () => {
+    // The approval queue is oldest-first, but a parent can decide any
+    // pending entry first: the earlier slot can end up rejected while a
+    // later one is still pending.
+    const pushups = task({ repeat: { type: "daily" }, dailyLimit: 3 });
+    const first = entry("t1", "kid", TODAY, "rejected");
+    const second = {
+      ...entry("t1", "kid", TODAY, "pending"),
+      id: "t1__kid__2026-08-23__2",
+    };
+    const rows = rowsFor({ tasks: [pushups], entries: [first, second] });
+    expect(rows[0].state).toBe("rejected");
+    expect(rows[0].entry).toBe(first);
+    expect(rows[0].dailyProgress).toEqual({ done: 1, count: 3 });
+  });
+});
+describe("progressOf with a dailyLimit task", () => {
+  it("sums coins across every entry banked today, even before the row itself is done", () => {
+    const pushups = task({ id: "t-pushups", repeat: { type: "daily" }, dailyLimit: 3, coin: 2 });
+    const first = entry("t-pushups", "kid", TODAY, "approved", 2);
+    const second = {
+      ...entry("t-pushups", "kid", TODAY, "approved", 2),
+      id: "t-pushups__kid__2026-08-23__2",
+    };
+    const rows = rowsFor({ tasks: [pushups], entries: [first, second] });
+    expect(rows[0].state).toBe("todo");
+    expect(progressOf(rows)).toEqual({ done: 0, total: 1, coins: 4 });
+  });
 });
 
 describe("groupTodayRows", () => {

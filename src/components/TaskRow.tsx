@@ -103,6 +103,11 @@ export function TaskRow(props: {
               {pill.text}
             </span>
           ) : null}
+          {row.dailyProgress ? (
+            <span className="mt-0.5 ml-1 inline-flex items-center whitespace-nowrap rounded-pill border border-rule bg-sunk px-2 py-0.5 text-xs font-bold tabular-nums text-muted">
+              {row.dailyProgress.done}/{row.dailyProgress.count}かい
+            </span>
+          ) : null}
         </span>
 
         <CoinAmount

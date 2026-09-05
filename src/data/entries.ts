@@ -22,7 +22,7 @@ import {
 } from "firebase/firestore";
 import { useMemo } from "react";
 import { db } from "../lib/firebase";
-import { entryId } from "../lib/ids";
+import { entryId, entrySeq } from "../lib/ids";
 import type { Entry, EntryStatus, Live, Task } from "../types";
 import { applyCoinMovement } from "./coins";
 import { coinDeltaForUndo, statusForTask } from "./entryRules";
@@ -44,17 +44,73 @@ function mapEntry(d: QueryDocumentSnapshot<DocumentData>): Entry {
 }
 
 /**
- * The document as it will be written, id included so the caller knows where to
- * put it. `completedAt` is a `serverTimestamp()` sentinel until it lands, which
- * is why it cannot be typed as a `Timestamp` yet.
+ * Which document a completion tap should write to today, given every entry
+ * this member already has for this task on this day (any status, oldest
+ * first). `null` means the day's quota is spent and there is nothing left to
+ * write — the caller should treat the tap as a no-op.
+ *
+ * A rejected entry — wherever it sits, not only at the end — is always
+ * redone in place (same slot, same id) before anything else: that is "try
+ * again", not "one more of the day's allowance". The approval queue is
+ * oldest-first but a parent can decide any pending entry first, so a slot
+ * earlier than the last one can be the rejected one while a later slot is
+ * still pending. Only once nothing is rejected does a new slot open, as long
+ * as fewer than `dailyLimit` entries are still live (approved or pending)
+ * today.
+ *
+ * The rejected slot's own id — via `entrySeq`, not its position in
+ * `todayEntries` — decides which seq to redo: a redo rewrites `completedAt`
+ * to now, so after one redo the array's completedAt order no longer matches
+ * seq order, and a second rejection could otherwise be redone into the
+ * wrong document.
+ *
+ * A new slot's seq is one past the highest seq any of today's entries
+ * actually holds — read the same way, via `entrySeq` — not `todayEntries.
+ * length + 1`: an undo deletes its entry outright, so the array can shrink
+ * while a later seq survives, and length-based numbering would then reuse
+ * — and overwrite — that surviving entry's id.
  */
+export function targetEntrySlot(
+  todayEntries: Entry[],
+  dailyLimit: number,
+): { seq: number; redo: boolean } | null {
+  const rejected = todayEntries.find((e) => e.status === "rejected");
+  if (rejected) {
+    return {
+      seq: entrySeq(rejected.id, rejected.taskId, rejected.memberId, rejected.dateKey),
+      redo: true,
+    };
+  }
+  const live = todayEntries.filter((e) => e.status !== "rejected").length;
+  if (live >= dailyLimit) return null;
+  const maxSeq = todayEntries.reduce(
+    (max, e) => Math.max(max, entrySeq(e.id, e.taskId, e.memberId, e.dateKey)),
+    0,
+  );
+  return { seq: maxSeq + 1, redo: false };
+}
+
+/** The id a completion tap would write to right now, or `null` if the day's
+ * quota is already spent. Used to key an uploaded photo to the slot it will
+ * land on before the entry itself is written. */
+export function nextEntryId(
+  task: Pick<Task, "id" | "dailyLimit">,
+  memberId: string,
+  dateKey: string,
+  todayEntries: Entry[],
+): string | null {
+  const slot = targetEntrySlot(todayEntries, task.dailyLimit ?? 1);
+  return slot ? entryId(task.id, memberId, dateKey, slot.seq) : null;
+}
+
 export function buildEntry(
   task: Task,
   memberId: string,
   dateKey: string,
+  seq: number,
 ): Omit<Entry, "completedAt"> & { completedAt: unknown } {
   return {
-    id: entryId(task.id, memberId, dateKey),
+    id: entryId(task.id, memberId, dateKey, seq),
     householdId: task.householdId,
     taskId: task.id,
     taskTitle: task.title,
@@ -159,25 +215,29 @@ export function usePendingEntries(householdId: string | null): Live<Entry[]> {
  * Returns the status it landed in, so the caller knows whether to celebrate
  * coins or a submission.
  *
- * Pass `existing` — the entry for this (task, member, day) from the snapshot
- * the screen already holds — to make a repeat tap a no-op. The document id is
- * idempotent but the ledger row is not, so the rules deny the overwrite rather
- * than pay twice; returning the status already on screen keeps a stale tap from
- * surfacing that as an error. A rejected entry is a redo, not a repeat, and
- * falls through to the write.
+ * Pass `todayEntries` — every entry this member already has for this
+ * (task, day) from the snapshot the screen already holds, oldest first — so
+ * `targetEntrySlot` can tell a repeat tap on a settled task apart from a
+ * genuinely new completion under `dailyLimit`. The document id for whichever
+ * slot it picks is idempotent but the ledger row is not, so the rules deny
+ * the overwrite rather than pay twice; a tap with no slot left (`null`) is a
+ * no-op that returns the last known status instead of surfacing an error. A
+ * trailing rejected entry is a redo, not a repeat, and falls through to the
+ * write regardless of how much of the day's allowance is already claimed.
  */
 export async function completeTask(
   task: Task,
   memberId: string,
   dateKey: string,
   actorUid: string,
-  existing?: Entry | null,
+  todayEntries: Entry[],
   /** Already uploaded by the caller; only the path is recorded here. */
   photoPath?: string,
 ): Promise<EntryStatus> {
-  if (existing && existing.status !== "rejected") return existing.status;
+  const slot = targetEntrySlot(todayEntries, task.dailyLimit ?? 1);
+  if (!slot) return todayEntries.at(-1)?.status ?? "approved";
   const firestore = db();
-  const { id, ...fields } = buildEntry(task, memberId, dateKey);
+  const { id, ...fields } = buildEntry(task, memberId, dateKey, slot.seq);
   const batch = writeBatch(firestore);
   batch.set(
     doc(firestore, COL, id),

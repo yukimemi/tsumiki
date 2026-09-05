@@ -27,8 +27,11 @@ balances/{householdId}__{memberId} 残高キャッシュ。台帳と同じ write
 payouts/{payoutId}                 おこづかい交換の申請と結果
 ```
 
-`entries` の ID を `taskId__memberId__dateKey` に固定しているのは、同じ人が同じ日に
-同じタスクを二重計上できないようにするため（`setDoc` が上書きになる）。
+`entries` の ID は既定で `taskId__memberId__dateKey` に固定されており、同じ人が
+同じ日に同じタスクを二重計上できないようにしている（`setDoc` が上書きになる）。
+`Task.dailyLimit` が 1 より大きいタスクだけは 1 日に複数回の完了を許し、2 回目以降は
+`taskId__memberId__dateKey__{seq}`（seq = 2, 3, ...）という別ドキュメントになる —
+`src/lib/ids.ts` の `entryId` / `src/data/entries.ts` の `targetEntrySlot` を参照。
 
 台帳が唯一の真実で、`balances` はその集計キャッシュ。ズレたら
 `scripts/recalc-balances.ts` で台帳から作り直せる。
@@ -126,6 +129,7 @@ export type Task = {
   needsApproval: boolean;
   assigneeIds: string[];                 // [] = かぞくの誰でも
   repeat: RepeatRule;
+  dailyLimit?: number;                   // 既定 1。daily/weekly/monthly のみ有効
   dueDate?: string;                      // "YYYY-MM-DD" 期限。「1かいだけ」用
   dueTime?: string;                      // "HH:mm"
   order: number;
@@ -211,7 +215,11 @@ export type Payout = {
 
 ## 3. 書き込みフロー（すべて `writeBatch`）
 
-- **完了** `completeTask(task, memberId, dateKey, actor)`
+- **完了** `completeTask(task, memberId, dateKey, actor, todayEntries)`
+  - `todayEntries`（その日の既存エントリ全部）と `task.dailyLimit` から
+    `targetEntrySlot` が書き込み先スロットを決める。末尾が `rejected` なら
+    そのスロットをやり直し、そうでなければ枠が余っている限り新しいスロット
+    （新しい entry ドキュメント）を開く。枠が尽きていれば no-op。
   - `status = task.needsApproval ? "pending" : "approved"`
   - entry を `setDoc`
   - `approved` のときだけ ledger に `+coin / reason:"task"` を追記し、

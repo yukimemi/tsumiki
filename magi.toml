@@ -1,0 +1,14 @@
+# magi — blind multi-agent implementation competition.
+#
+# Roster, roles and graph shape are inherited from the machine-wide
+# config (%APPDATA%\magi\config.toml) — this file states only what
+# is peculiar to tsumiki: the verification commands.
+
+[verify]
+# Run once per review round in the winner's worktree; failures are
+# fed back to the fixer. No dedicated e2e suite in this repo — the
+# vitest run is what actually covers it.
+e2e = ["pnpm test"]
+# Final gate. Mirrors .github/workflows/ci.yml's `check` job
+# exactly, so a clean magi run means a green PR.
+gate = ["pnpm lint", "pnpm build", "pnpm test"]

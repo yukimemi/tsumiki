@@ -7,15 +7,39 @@
 const SEP = "__";
 
 /**
- * One member may complete one task once per day. Encoding that rule into the
- * document id makes `setDoc` idempotent instead of racing a query.
+ * One member may complete one task once per day by default. A task with
+ * `dailyLimit > 1` gets one more slot per completion beyond the first,
+ * `seq` 2, 3, ... — still deterministic, so a retry of the *same* slot lands
+ * as the same document instead of paying twice, and a genuinely new
+ * completion gets a genuinely new id instead of overwriting the last one.
  */
 export function entryId(
   taskId: string,
   memberId: string,
   dateKey: string,
+  seq = 1,
 ): string {
-  return `${taskId}${SEP}${memberId}${SEP}${dateKey}`;
+  const base = `${taskId}${SEP}${memberId}${SEP}${dateKey}`;
+  return seq <= 1 ? base : `${base}${SEP}${seq}`;
+}
+
+/**
+ * The inverse of `entryId`: which slot an existing entry occupies. A redo
+ * must target the id the entry actually holds, not wherever it happens to
+ * sort today — redoing bumps `completedAt` to now, which can push an earlier
+ * slot's entry later than a slot opened after it, so array position stops
+ * lining up with `seq` the moment more than one redo has happened.
+ */
+export function entrySeq(
+  id: string,
+  taskId: string,
+  memberId: string,
+  dateKey: string,
+): number {
+  const base = `${taskId}${SEP}${memberId}${SEP}${dateKey}`;
+  if (id === base) return 1;
+  const match = /^__(\d+)$/.exec(id.slice(base.length));
+  return match ? Number(match[1]) : 1;
 }
 
 /** One balance document per (household, member) pair. */

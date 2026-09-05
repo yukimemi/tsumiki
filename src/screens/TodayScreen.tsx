@@ -20,6 +20,7 @@ import {
 } from "../components/ui";
 import {
   completeTask,
+  nextEntryId,
   setEntryPhoto,
   undoEntry,
   useEntriesForDate,
@@ -30,7 +31,6 @@ import { useTasks } from "../data/tasks";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
 import { addDaysKey, formatDateJa, nowHm, todayKey } from "../lib/date";
-import { entryId } from "../lib/ids";
 import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import type { Entry } from "../types";
 import { UNFILED_LABEL, groupTodayRows, progressOf, todayRowsFor } from "./today";
@@ -162,21 +162,25 @@ export function TodayScreen(): JSX.Element {
   ): void => {
     void action.run(async () => {
       // Upload before the entry write. A path recorded for an object that
-      // never arrived would render as a permanently broken photo.
-      const photoPath = file
-        ? await uploadEntryPhoto({
-            householdId: row.task.householdId,
-            entryId: entryId(row.task.id, shownMemberId, dateKey),
-            file,
-          })
-        : undefined;
+      // never arrived would render as a permanently broken photo. Keyed to
+      // whichever slot this tap will land on, so two completions on the
+      // same day never share — or clobber — one photo.
+      const targetId = nextEntryId(row.task, shownMemberId, dateKey, row.entries);
+      const photoPath =
+        file && targetId
+          ? await uploadEntryPhoto({
+              householdId: row.task.householdId,
+              entryId: targetId,
+              file,
+            })
+          : undefined;
 
       const status = await completeTask(
         row.task,
         shownMemberId,
         dateKey,
         uid,
-        row.entry,
+        row.entries,
         photoPath,
       );
       celebrate("stack", { origin });
@@ -194,10 +198,16 @@ export function TodayScreen(): JSX.Element {
 
   /**
    * A chore that insists on a photo cannot be finished by the circle alone —
-   * the tap opens the detail sheet, where the camera button lives.
+   * the tap opens the detail sheet, where the camera button lives. Applies to
+   * every tap that will actually create a new completion (`todo`/`late`),
+   * not just the day's first one: a `dailyLimit` task still wants its proof
+   * on the second, third, ... rep.
    */
   const requestComplete = (row: TodayRow, origin: DOMRect): void => {
-    if (row.task.needsPhoto && !row.entry) {
+    if (
+      row.task.needsPhoto &&
+      (row.state === "todo" || row.state === "late")
+    ) {
       setPendingPhotoOrigin(origin);
       setDetailTaskId(row.task.id);
       return;
@@ -432,6 +442,15 @@ export function TodayScreen(): JSX.Element {
                   {repeatLabelJa(detailRow.task.repeat)}
                 </dd>
               </div>
+              {detailRow.dailyProgress ? (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted">きょうの かいすう</dt>
+                  <dd className="font-bold tabular-nums text-ink">
+                    {detailRow.dailyProgress.done} /{" "}
+                    {detailRow.dailyProgress.count} かい
+                  </dd>
+                </div>
+              ) : null}
               {detailRow.task.dueTime ? (
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-muted">じかん</dt>
@@ -472,7 +491,8 @@ export function TodayScreen(): JSX.Element {
             ) : null}
 
             <div className="flex flex-col gap-2">
-              {detailRow.entry === null && !isFuture ? (
+              {(detailRow.state === "todo" || detailRow.state === "late") &&
+              !isFuture ? (
                 detailRow.task.needsPhoto && isPro ? (
                   <>
                     <p className="text-sm text-muted">
