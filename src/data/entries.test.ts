@@ -55,15 +55,25 @@ describe("entryId", () => {
   });
 });
 
-function todayEntry(status: "pending" | "approved" | "rejected"): Entry {
+const TASK_ID = "t1";
+const MEMBER_ID = "kid";
+const DATE_KEY = "2026-08-23";
+
+// `seq` defaults to the slot the entry would occupy as the day's first
+// completion; callers building a multi-slot day pass it explicitly so the id
+// matches the real slot instead of just the array position.
+function todayEntry(
+  status: "pending" | "approved" | "rejected",
+  seq = 1,
+): Entry {
   return {
-    id: "e1",
+    id: entryId(TASK_ID, MEMBER_ID, DATE_KEY, seq),
     householdId: "h1",
-    taskId: "t1",
+    taskId: TASK_ID,
     taskTitle: "うんどう",
     taskEmoji: "🏃",
-    memberId: "kid",
-    dateKey: "2026-08-23",
+    memberId: MEMBER_ID,
+    dateKey: DATE_KEY,
     status,
     coin: 1,
     completedAt: {} as Entry["completedAt"],
@@ -78,11 +88,11 @@ describe("targetEntrySlot", () => {
 
   it("redoes the trailing rejected entry in place regardless of the limit", () => {
     expect(
-      targetEntrySlot([todayEntry("rejected")], 1),
+      targetEntrySlot([todayEntry("rejected", 1)], 1),
     ).toEqual({ seq: 1, redo: true });
     expect(
       targetEntrySlot(
-        [todayEntry("approved"), todayEntry("rejected")],
+        [todayEntry("approved", 1), todayEntry("rejected", 2)],
         2,
       ),
     ).toEqual({ seq: 2, redo: true });
@@ -90,14 +100,14 @@ describe("targetEntrySlot", () => {
 
   it("opens the next slot while under a multi-completion daily limit", () => {
     expect(
-      targetEntrySlot([todayEntry("approved")], 3),
+      targetEntrySlot([todayEntry("approved", 1)], 3),
     ).toEqual({ seq: 2, redo: false });
   });
 
   it("refuses another slot once the daily limit is reached", () => {
     expect(
       targetEntrySlot(
-        [todayEntry("approved"), todayEntry("pending")],
+        [todayEntry("approved", 1), todayEntry("pending", 2)],
         2,
       ),
     ).toBeNull();
@@ -109,9 +119,21 @@ describe("targetEntrySlot", () => {
     // entry first, so rejection order need not match completion order.
     expect(
       targetEntrySlot(
-        [todayEntry("rejected"), todayEntry("pending")],
+        [todayEntry("rejected", 1), todayEntry("pending", 2)],
         3,
       ),
     ).toEqual({ seq: 1, redo: true });
+  });
+
+  it("redoes the rejected slot by its own id even once a redo has reordered the array", () => {
+    // seq 2 was rejected, but a since-redone seq 1 now has a later
+    // `completedAt` and sorts after it — array position (0) must not be
+    // mistaken for seq: only the id says this rejected entry is seq 2.
+    expect(
+      targetEntrySlot(
+        [todayEntry("rejected", 2), todayEntry("pending", 1)],
+        3,
+      ),
+    ).toEqual({ seq: 2, redo: true });
   });
 });

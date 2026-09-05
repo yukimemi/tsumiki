@@ -22,7 +22,7 @@ import {
 } from "firebase/firestore";
 import { useMemo } from "react";
 import { db } from "../lib/firebase";
-import { entryId } from "../lib/ids";
+import { entryId, entrySeq } from "../lib/ids";
 import type { Entry, EntryStatus, Live, Task } from "../types";
 import { applyCoinMovement } from "./coins";
 import { coinDeltaForUndo, statusForTask } from "./entryRules";
@@ -57,14 +57,23 @@ function mapEntry(d: QueryDocumentSnapshot<DocumentData>): Entry {
  * still pending. Only once nothing is rejected does a new slot open, as long
  * as fewer than `dailyLimit` entries are still live (approved or pending)
  * today.
+ *
+ * The rejected slot's own id — via `entrySeq`, not its position in
+ * `todayEntries` — decides which seq to redo: a redo rewrites `completedAt`
+ * to now, so after one redo the array's completedAt order no longer matches
+ * seq order, and a second rejection could otherwise be redone into the
+ * wrong document.
  */
 export function targetEntrySlot(
   todayEntries: Entry[],
   dailyLimit: number,
 ): { seq: number; redo: boolean } | null {
-  const rejectedIndex = todayEntries.findIndex((e) => e.status === "rejected");
-  if (rejectedIndex !== -1) {
-    return { seq: rejectedIndex + 1, redo: true };
+  const rejected = todayEntries.find((e) => e.status === "rejected");
+  if (rejected) {
+    return {
+      seq: entrySeq(rejected.id, rejected.taskId, rejected.memberId, rejected.dateKey),
+      redo: true,
+    };
   }
   const live = todayEntries.filter((e) => e.status !== "rejected").length;
   if (live >= dailyLimit) return null;
