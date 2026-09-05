@@ -23,6 +23,25 @@ export function entryId(
   return seq <= 1 ? base : `${base}${SEP}${seq}`;
 }
 
+/**
+ * The inverse of `entryId`: which slot an existing entry occupies. A redo
+ * must target the id the entry actually holds, not wherever it happens to
+ * sort today — redoing bumps `completedAt` to now, which can push an earlier
+ * slot's entry later than a slot opened after it, so array position stops
+ * lining up with `seq` the moment more than one redo has happened.
+ */
+export function entrySeq(
+  id: string,
+  taskId: string,
+  memberId: string,
+  dateKey: string,
+): number {
+  const base = `${taskId}${SEP}${memberId}${SEP}${dateKey}`;
+  if (id === base) return 1;
+  const match = /^__(\d+)$/.exec(id.slice(base.length));
+  return match ? Number(match[1]) : 1;
+}
+
 /** One balance document per (household, member) pair. */
 export function balanceId(householdId: string, memberId: string): string {
   return `${householdId}${SEP}${memberId}`;
