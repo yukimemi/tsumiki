@@ -136,4 +136,17 @@ describe("targetEntrySlot", () => {
       ),
     ).toEqual({ seq: 2, redo: true });
   });
+
+  it("opens a fresh seq past the highest surviving one, not past the array length", () => {
+    // Slots 1-3 were completed; slot 2 was then undone (its entry deleted
+    // outright, not left behind as `rejected`), so only slots 1 and 3
+    // remain — an array of length 2. `todayEntries.length + 1` would say
+    // "3" and collide with — and overwrite — the surviving slot-3 entry.
+    expect(
+      targetEntrySlot(
+        [todayEntry("approved", 1), todayEntry("approved", 3)],
+        5,
+      ),
+    ).toEqual({ seq: 4, redo: false });
+  });
 });

@@ -63,6 +63,12 @@ function mapEntry(d: QueryDocumentSnapshot<DocumentData>): Entry {
  * to now, so after one redo the array's completedAt order no longer matches
  * seq order, and a second rejection could otherwise be redone into the
  * wrong document.
+ *
+ * A new slot's seq is one past the highest seq any of today's entries
+ * actually holds — read the same way, via `entrySeq` — not `todayEntries.
+ * length + 1`: an undo deletes its entry outright, so the array can shrink
+ * while a later seq survives, and length-based numbering would then reuse
+ * — and overwrite — that surviving entry's id.
  */
 export function targetEntrySlot(
   todayEntries: Entry[],
@@ -77,7 +83,11 @@ export function targetEntrySlot(
   }
   const live = todayEntries.filter((e) => e.status !== "rejected").length;
   if (live >= dailyLimit) return null;
-  return { seq: todayEntries.length + 1, redo: false };
+  const maxSeq = todayEntries.reduce(
+    (max, e) => Math.max(max, entrySeq(e.id, e.taskId, e.memberId, e.dateKey)),
+    0,
+  );
+  return { seq: maxSeq + 1, redo: false };
 }
 
 /** The id a completion tap would write to right now, or `null` if the day's
