@@ -49,18 +49,22 @@ function mapEntry(d: QueryDocumentSnapshot<DocumentData>): Entry {
  * first). `null` means the day's quota is spent and there is nothing left to
  * write — the caller should treat the tap as a no-op.
  *
- * A trailing rejected entry is always redone in place (same slot, same id):
- * that is "try again", not "one more of the day's allowance". Otherwise a
- * new slot opens as long as fewer than `dailyLimit` entries are still live
- * (approved or pending) today.
+ * A rejected entry — wherever it sits, not only at the end — is always
+ * redone in place (same slot, same id) before anything else: that is "try
+ * again", not "one more of the day's allowance". The approval queue is
+ * oldest-first but a parent can decide any pending entry first, so a slot
+ * earlier than the last one can be the rejected one while a later slot is
+ * still pending. Only once nothing is rejected does a new slot open, as long
+ * as fewer than `dailyLimit` entries are still live (approved or pending)
+ * today.
  */
 export function targetEntrySlot(
   todayEntries: Entry[],
   dailyLimit: number,
 ): { seq: number; redo: boolean } | null {
-  const last = todayEntries.at(-1) ?? null;
-  if (last && last.status === "rejected") {
-    return { seq: todayEntries.length, redo: true };
+  const rejectedIndex = todayEntries.findIndex((e) => e.status === "rejected");
+  if (rejectedIndex !== -1) {
+    return { seq: rejectedIndex + 1, redo: true };
   }
   const live = todayEntries.filter((e) => e.status !== "rejected").length;
   if (live >= dailyLimit) return null;

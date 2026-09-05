@@ -96,7 +96,15 @@ export function todayRowsFor(input: {
     const todays = known
       .filter((candidate) => candidate.dateKey === dateKey)
       .sort((a, b) => completedAtMillis(a) - completedAtMillis(b));
-    const entry = todays.at(-1) ?? null;
+    // A rejected entry needs a redo before anything else, wherever it sits
+    // among today's slots — the approval queue is oldest-first but a parent
+    // can decide any pending entry first, so a rejected slot is not always
+    // the most recent one. Only when nothing is rejected does the most
+    // recent entry stand in as "the" entry for this row.
+    const entry =
+      todays.find((candidate) => candidate.status === "rejected") ??
+      todays.at(-1) ??
+      null;
 
     // A one-off does not come back once it has been done — but only on days
     // other than the one it was done on. Retiring it from its own day too

@@ -102,4 +102,16 @@ describe("targetEntrySlot", () => {
       ),
     ).toBeNull();
   });
+
+  it("redoes a rejected entry that isn't the trailing one", () => {
+    // Oldest slot got rejected while a newer one is still pending — the
+    // approval queue is oldest-first, but a parent can decide any pending
+    // entry first, so rejection order need not match completion order.
+    expect(
+      targetEntrySlot(
+        [todayEntry("rejected"), todayEntry("pending")],
+        3,
+      ),
+    ).toEqual({ seq: 1, redo: true });
+  });
 });
