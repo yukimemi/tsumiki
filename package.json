@@ -42,7 +42,7 @@
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.69.0",
-    "vercel": "^59.10.0",
+    "vercel": "^59.11.2",
     "vite": "^8.2.2",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.11"
