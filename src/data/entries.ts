@@ -44,17 +44,50 @@ function mapEntry(d: QueryDocumentSnapshot<DocumentData>): Entry {
 }
 
 /**
- * The document as it will be written, id included so the caller knows where to
- * put it. `completedAt` is a `serverTimestamp()` sentinel until it lands, which
- * is why it cannot be typed as a `Timestamp` yet.
+ * Which document a completion tap should write to today, given every entry
+ * this member already has for this task on this day (any status, oldest
+ * first). `null` means the day's quota is spent and there is nothing left to
+ * write — the caller should treat the tap as a no-op.
+ *
+ * A trailing rejected entry is always redone in place (same slot, same id):
+ * that is "try again", not "one more of the day's allowance". Otherwise a
+ * new slot opens as long as fewer than `dailyLimit` entries are still live
+ * (approved or pending) today.
  */
+export function targetEntrySlot(
+  todayEntries: Entry[],
+  dailyLimit: number,
+): { seq: number; redo: boolean } | null {
+  const last = todayEntries.at(-1) ?? null;
+  if (last && last.status === "rejected") {
+    return { seq: todayEntries.length, redo: true };
+  }
+  const live = todayEntries.filter((e) => e.status !== "rejected").length;
+  if (live >= dailyLimit) return null;
+  return { seq: todayEntries.length + 1, redo: false };
+}
+
+/** The id a completion tap would write to right now, or `null` if the day's
+ * quota is already spent. Used to key an uploaded photo to the slot it will
+ * land on before the entry itself is written. */
+export function nextEntryId(
+  task: Pick<Task, "id" | "dailyLimit">,
+  memberId: string,
+  dateKey: string,
+  todayEntries: Entry[],
+): string | null {
+  const slot = targetEntrySlot(todayEntries, task.dailyLimit ?? 1);
+  return slot ? entryId(task.id, memberId, dateKey, slot.seq) : null;
+}
+
 export function buildEntry(
   task: Task,
   memberId: string,
   dateKey: string,
+  seq: number,
 ): Omit<Entry, "completedAt"> & { completedAt: unknown } {
   return {
-    id: entryId(task.id, memberId, dateKey),
+    id: entryId(task.id, memberId, dateKey, seq),
     householdId: task.householdId,
     taskId: task.id,
     taskTitle: task.title,
@@ -159,25 +192,29 @@ export function usePendingEntries(householdId: string | null): Live<Entry[]> {
  * Returns the status it landed in, so the caller knows whether to celebrate
  * coins or a submission.
  *
- * Pass `existing` — the entry for this (task, member, day) from the snapshot
- * the screen already holds — to make a repeat tap a no-op. The document id is
- * idempotent but the ledger row is not, so the rules deny the overwrite rather
- * than pay twice; returning the status already on screen keeps a stale tap from
- * surfacing that as an error. A rejected entry is a redo, not a repeat, and
- * falls through to the write.
+ * Pass `todayEntries` — every entry this member already has for this
+ * (task, day) from the snapshot the screen already holds, oldest first — so
+ * `targetEntrySlot` can tell a repeat tap on a settled task apart from a
+ * genuinely new completion under `dailyLimit`. The document id for whichever
+ * slot it picks is idempotent but the ledger row is not, so the rules deny
+ * the overwrite rather than pay twice; a tap with no slot left (`null`) is a
+ * no-op that returns the last known status instead of surfacing an error. A
+ * trailing rejected entry is a redo, not a repeat, and falls through to the
+ * write regardless of how much of the day's allowance is already claimed.
  */
 export async function completeTask(
   task: Task,
   memberId: string,
   dateKey: string,
   actorUid: string,
-  existing?: Entry | null,
+  todayEntries: Entry[],
   /** Already uploaded by the caller; only the path is recorded here. */
   photoPath?: string,
 ): Promise<EntryStatus> {
-  if (existing && existing.status !== "rejected") return existing.status;
+  const slot = targetEntrySlot(todayEntries, task.dailyLimit ?? 1);
+  if (!slot) return todayEntries.at(-1)?.status ?? "approved";
   const firestore = db();
-  const { id, ...fields } = buildEntry(task, memberId, dateKey);
+  const { id, ...fields } = buildEntry(task, memberId, dateKey, slot.seq);
   const batch = writeBatch(firestore);
   batch.set(
     doc(firestore, COL, id),

@@ -3,7 +3,9 @@
 // these two decisions plus one deterministic id.
 
 import { describe, expect, it } from "vitest";
+import { targetEntrySlot } from "./entries";
 import { entryId } from "../lib/ids";
+import type { Entry } from "../types";
 import { coinDeltaForUndo, statusForTask } from "./entryRules";
 
 describe("statusForTask", () => {
@@ -42,5 +44,62 @@ describe("entryId", () => {
     expect(entryId("task2", "member1", "2026-08-23")).not.toBe(base);
     expect(entryId("task1", "member2", "2026-08-23")).not.toBe(base);
     expect(entryId("task1", "member1", "2026-08-24")).not.toBe(base);
+  });
+
+  it("appends a seq for any completion beyond the first", () => {
+    const first = entryId("task1", "member1", "2026-08-23", 1);
+    expect(first).toBe(entryId("task1", "member1", "2026-08-23"));
+    const second = entryId("task1", "member1", "2026-08-23", 2);
+    expect(second).not.toBe(first);
+    expect(second).toBe(`${first}__2`);
+  });
+});
+
+function todayEntry(status: "pending" | "approved" | "rejected"): Entry {
+  return {
+    id: "e1",
+    householdId: "h1",
+    taskId: "t1",
+    taskTitle: "うんどう",
+    taskEmoji: "🏃",
+    memberId: "kid",
+    dateKey: "2026-08-23",
+    status,
+    coin: 1,
+    completedAt: {} as Entry["completedAt"],
+    commentCount: 0,
+  };
+}
+
+describe("targetEntrySlot", () => {
+  it("opens slot 1 for a fresh day", () => {
+    expect(targetEntrySlot([], 1)).toEqual({ seq: 1, redo: false });
+  });
+
+  it("redoes the trailing rejected entry in place regardless of the limit", () => {
+    expect(
+      targetEntrySlot([todayEntry("rejected")], 1),
+    ).toEqual({ seq: 1, redo: true });
+    expect(
+      targetEntrySlot(
+        [todayEntry("approved"), todayEntry("rejected")],
+        2,
+      ),
+    ).toEqual({ seq: 2, redo: true });
+  });
+
+  it("opens the next slot while under a multi-completion daily limit", () => {
+    expect(
+      targetEntrySlot([todayEntry("approved")], 3),
+    ).toEqual({ seq: 2, redo: false });
+  });
+
+  it("refuses another slot once the daily limit is reached", () => {
+    expect(
+      targetEntrySlot(
+        [todayEntry("approved"), todayEntry("pending")],
+        2,
+      ),
+    ).toBeNull();
   });
 });
