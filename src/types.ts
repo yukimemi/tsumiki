@@ -129,6 +129,14 @@ export type Task = {
   assigneeIds: string[];
   repeat: RepeatRule;
   /**
+   * How many times per day this task may be completed. Undefined (or `1`)
+   * means the long-standing rule: once a day, one entry. Anything higher
+   * only makes sense alongside `daily`/`weekly`/`monthly` — a fixed-cadence
+   * task that recurs, not a one-off or a period quota — and each completion
+   * still writes its own `entries` document (see `src/lib/ids.ts`).
+   */
+  dailyLimit?: number;
+  /**
    * "YYYY-MM-DD" in Asia/Tokyo. A hard calendar deadline, distinct from
    * `dueTime`'s same-day clock cutoff — meant for a one-off task that has to
    * happen by a specific date ("宿題を金曜までに"), not a daily nag. Once
@@ -149,7 +157,13 @@ export type Task = {
 export type EntryStatus = "pending" | "approved" | "rejected";
 
 export type Entry = {
-  /** `${taskId}__${memberId}__${dateKey}` — blocks double counting. */
+  /**
+   * `${taskId}__${memberId}__${dateKey}` for the day's first completion;
+   * `${taskId}__${memberId}__${dateKey}__${seq}` (seq ≥ 2) for any
+   * completion beyond the first that `Task.dailyLimit` allows. Either way
+   * the id is deterministic, so a retry lands as the same document instead
+   * of paying twice.
+   */
   id: string;
   householdId: string;
   taskId: string;

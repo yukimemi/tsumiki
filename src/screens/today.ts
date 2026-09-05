@@ -10,7 +10,16 @@ import type { Entry, Task } from "../types";
 
 export type TodayRow = {
   task: Task;
-  /** The entry for this (task, member, shown day), when one exists. */
+  /**
+   * Every entry this member has for this task on the shown day, oldest
+   * first. Usually zero or one — `dailyLimit` is what lets it grow past
+   * one, each element its own completion with its own coin, photo and
+   * comment thread.
+   */
+  entries: Entry[];
+  /** The most recent of `entries`, when one exists — everything that only
+   * ever needed "the" entry (undo, photo, comments, reject reason) keeps
+   * acting on this one. */
   entry: Entry | null;
   state: "todo" | "pending" | "approved" | "rejected" | "late";
   /**
@@ -19,6 +28,12 @@ export type TodayRow = {
    * own entry included.
    */
   periodProgress?: { done: number; count: number };
+  /**
+   * Only set when `Task.dailyLimit` is above the default of one: how many
+   * of today's allowance are already claimed (approved or pending). The row
+   * stays tappable (`state` "todo"/"late") until `done` reaches `count`.
+   */
+  dailyProgress?: { done: number; count: number };
 };
 
 /**
@@ -34,6 +49,16 @@ const STATE_RANK: Record<TodayRow["state"], number> = {
   pending: 3,
   approved: 4,
 };
+
+/**
+ * `completedAt` is a resolved Firestore `Timestamp` once a live snapshot has
+ * it, but a hand-built test fixture may carry a bare placeholder instead —
+ * that's fine, everything sorts to 0 and a stable sort keeps fixture order.
+ */
+function completedAtMillis(entry: Entry): number {
+  const value = entry.completedAt as { toMillis?: () => number } | undefined;
+  return typeof value?.toMillis === "function" ? value.toMillis() : 0;
+}
 
 /**
  * The rows for one member on one day.
@@ -62,9 +87,16 @@ export function todayRowsFor(input: {
     }
 
     const known = entries.filter(
-      (entry) => entry.taskId === task.id && entry.memberId === memberId,
+      (candidate) => candidate.taskId === task.id && candidate.memberId === memberId,
     );
-    const entry = known.find((candidate) => candidate.dateKey === dateKey) ?? null;
+    // Oldest first, so `.at(-1)` is always "the most recent completion" and
+    // `todays.length` is a stable count to derive a new slot's position
+    // from. `completedAt` is a resolved `Timestamp` once a snapshot is live;
+    // sort is a no-op (and harmless) before that.
+    const todays = known
+      .filter((candidate) => candidate.dateKey === dateKey)
+      .sort((a, b) => completedAtMillis(a) - completedAtMillis(b));
+    const entry = todays.at(-1) ?? null;
 
     // A one-off does not come back once it has been done — but only on days
     // other than the one it was done on. Retiring it from its own day too
@@ -85,7 +117,10 @@ export function todayRowsFor(input: {
     // A weeklyCount/monthlyCount task can be done on any day of its
     // period, but only up to `count` times — same "the day it happened on
     // stays visible, every other day doesn't come back" shape as `once`,
-    // just scoped to the period instead of forever.
+    // just scoped to the period instead of forever. `dailyLimit` is a
+    // different axis (repeats within one day) and does not apply to these.
+    const isPeriodType =
+      task.repeat.type === "weeklyCount" || task.repeat.type === "monthlyCount";
     let periodProgress: TodayRow["periodProgress"];
     if (task.repeat.type === "weeklyCount" || task.repeat.type === "monthlyCount") {
       const periodKeyOf = task.repeat.type === "weeklyCount" ? weekKeyOf : monthKeyOf;
@@ -99,20 +134,44 @@ export function todayRowsFor(input: {
       periodProgress = { done: claimed, count: task.repeat.count };
     }
 
+    // How many of today's own allowance (default 1) are already claimed.
+    // Below the limit the row stays open for another tap even though a
+    // previous completion today already landed — that is the whole point
+    // of `dailyLimit`, and it is what tells `state` below to keep offering
+    // "todo" instead of freezing on the last completion's status.
+    const dailyLimit = task.dailyLimit ?? 1;
+    const claimedToday = todays.filter(
+      (candidate) => candidate.status === "approved" || candidate.status === "pending",
+    ).length;
+    const canAddMore = !isPeriodType && claimedToday < dailyLimit;
+    const dailyProgress: TodayRow["dailyProgress"] =
+      !isPeriodType && dailyLimit > 1
+        ? { done: claimedToday, count: dailyLimit }
+        : undefined;
+
     // These two have no per-day deadline — any day of the period is fine —
     // so `isOverdue` must not run for them: a past day within a still-open
     // period is not "late", it is just an earlier chance already taken or
     // skipped. `periodProgress` is what tells the parent "at risk", not a
     // late badge on every day the child didn't happen to pick.
-    const state: TodayRow["state"] = entry
-      ? entry.status
-      : task.repeat.type === "weeklyCount" || task.repeat.type === "monthlyCount"
-        ? "todo"
-        : isOverdue(task, dateKey, today, nowHm)
-          ? "late"
-          : "todo";
+    const openState: TodayRow["state"] = isPeriodType
+      ? "todo"
+      : isOverdue(task, dateKey, today, nowHm)
+        ? "late"
+        : "todo";
 
-    rows.push({ task, entry, state, periodProgress });
+    // A rejected completion always needs a redo before anything else, no
+    // matter how much of today's allowance is otherwise spoken for; short of
+    // that, a settled task (no room left today) freezes on its own status,
+    // and one with room left stays open for the next tap.
+    const state: TodayRow["state"] =
+      entry && entry.status === "rejected"
+        ? "rejected"
+        : entry && !canAddMore
+          ? entry.status
+          : openState;
+
+    rows.push({ task, entries: todays, entry, state, periodProgress, dailyProgress });
   }
 
   return rows.sort(
@@ -348,8 +407,12 @@ export function categoriesOf(tasks: Task[]): string[] {
 }
 
 /**
- * The ring at the top of the screen. Only an approved entry counts as done
- * and only approved entries pay — pending coins are a promise, not earnings.
+ * The ring at the top of the screen. `done` counts a row once it is fully
+ * settled for the day (state `approved`) — the same "one unit per task" it
+ * always was. Coins are summed across every one of the row's own entries
+ * that landed `approved`, though: a multi-completion task that has banked
+ * coins from earlier taps today must show them before the row itself
+ * finishes, or a child watching the ring would see nothing move.
  */
 export function progressOf(rows: TodayRow[]): {
   done: number;
@@ -359,9 +422,10 @@ export function progressOf(rows: TodayRow[]): {
   let done = 0;
   let coins = 0;
   for (const row of rows) {
-    if (row.state !== "approved") continue;
-    done += 1;
-    coins += row.entry?.coin ?? 0;
+    if (row.state === "approved") done += 1;
+    for (const entry of row.entries) {
+      if (entry.status === "approved") coins += entry.coin;
+    }
   }
   return { done, total: rows.length, coins };
 }

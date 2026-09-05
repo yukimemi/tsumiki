@@ -57,6 +57,19 @@ const MAX_WEEKLY_COUNT = 7;
 /** A month has at most 31 days, same reasoning as `MAX_WEEKLY_COUNT`. */
 const MAX_MONTHLY_COUNT = 31;
 
+/** Past this, "多い" stops meaning "a chore repeated a few times" and starts
+ * meaning something the coin cap already exists to discourage. */
+const MAX_DAILY_LIMIT = 20;
+
+/** `dailyLimit` only means anything for a task with a fixed calendar
+ * cadence — `once` never repeats, and `weeklyCount`/`monthlyCount` already
+ * spend their "how many" on a period, not a day. */
+function isDailyLimitable(repeatType: RepeatType): boolean {
+  return (
+    repeatType === "daily" || repeatType === "weekly" || repeatType === "monthly"
+  );
+}
+
 const MONTH_DAYS: readonly number[] = Array.from(
   { length: 31 },
   (_, index) => index + 1,
@@ -114,6 +127,11 @@ const schema = z
     weekdays: z.array(z.number().int().min(0).max(6)),
     monthDays: z.array(z.number().int().min(1).max(31)),
     periodCount: z.number().int().min(1, "1いじょうに してね"),
+    dailyLimit: z
+      .number()
+      .int("かいすうは せいすうで いれてね")
+      .min(1, "1いじょうに してね")
+      .max(MAX_DAILY_LIMIT, `1にちに ${MAX_DAILY_LIMIT}かいまでです`),
     dueDate: z
       .string()
       .refine(
@@ -237,6 +255,7 @@ function valuesOf(task: Task | null): FormValues {
       repeat.type === "weeklyCount" || repeat.type === "monthlyCount"
         ? repeat.count
         : 1,
+    dailyLimit: task?.dailyLimit ?? 1,
     dueDate: task?.dueDate ?? "",
     dueTime: task?.dueTime ?? "",
     note: task?.note ?? "",
@@ -270,6 +289,10 @@ function draftOf(values: FormValues, members: Member[]): TaskDraft {
     // Someone who has left the household must not keep owning a chore.
     assigneeIds: values.assigneeIds.filter((uid) => known.has(uid)),
     repeat: repeatOf(values),
+    // Switching away from a fixed-cadence repeat drops any daily allowance
+    // set while it was one — the field is meaningless anywhere else, and a
+    // stale 5 hiding behind a hidden form control would be a silent trap.
+    dailyLimit: isDailyLimitable(values.repeatType) ? values.dailyLimit : 1,
     // A calendar deadline only makes sense for a one-off; switching a task
     // away from "once" must not leave a stale date behind it.
     dueDate: values.repeatType === "once" ? values.dueDate : "",
@@ -701,6 +724,61 @@ function TaskForm(props: {
                     </button>
                   );
                 })}
+              </div>
+            </Field>
+          )}
+        />
+      ) : null}
+
+      {isDailyLimitable(repeatType) ? (
+        <Controller
+          control={control}
+          name="dailyLimit"
+          render={({ field }) => (
+            <Field
+              label="1にちに なんかい"
+              hint="1のままなら いままでどおり。ふやすと おなじ ひに なんども できるようになるよ"
+              error={messageOf(errors.dailyLimit)}
+              group
+            >
+              <div className="flex items-center gap-2">
+                <IconButton
+                  label="かいすうを へらす"
+                  disabled={field.value <= 1}
+                  onClick={() =>
+                    field.onChange(clampCount(field.value - 1, MAX_DAILY_LIMIT))
+                  }
+                >
+                  −
+                </IconButton>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={MAX_DAILY_LIMIT}
+                  step={1}
+                  aria-label="1にちの かいすう"
+                  value={field.value}
+                  onBlur={field.onBlur}
+                  onChange={(event) =>
+                    field.onChange(
+                      clampCount(Number(event.target.value), MAX_DAILY_LIMIT),
+                    )
+                  }
+                  className="w-20 text-center tabular-nums"
+                />
+                <IconButton
+                  label="かいすうを ふやす"
+                  disabled={field.value >= MAX_DAILY_LIMIT}
+                  onClick={() =>
+                    field.onChange(clampCount(field.value + 1, MAX_DAILY_LIMIT))
+                  }
+                >
+                  ＋
+                </IconButton>
+                <span className="text-sm font-bold tabular-nums text-muted">
+                  かい / にち
+                </span>
               </div>
             </Field>
           )}
