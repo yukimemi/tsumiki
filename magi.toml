@@ -1,0 +1,51 @@
+# magi reviewing tsumiki.
+#
+# **Only what is peculiar to this checkout lives here.** The roster, seat
+# assignment, run shape and update policy live in the machine layer
+# (`<config_dir>/magi/config.toml`) because none of them are facts about this
+# repository — they are facts about which agent CLIs are installed and what
+# the operator is willing to spend. What is left is what a different machine
+# would still need to be told:
+#
+# - `[verify]` runs this repo's pnpm scripts; no other repo has them.
+# - `[merge] base` names this repository's branch, and is required at all
+#   because of how this checkout is set up (see below).
+# - `[prompts]` are this project's conventions.
+#
+# An array may be declared in exactly one layer (`Config::refuse_split_arrays`),
+# so `[verify]`'s arrays being here is also why the roster's arrays are *only*
+# in the machine layer.
+#
+# Rendered by teravars. Tera braces are live everywhere in this file, but
+# comments are stripped before Tera sees them, so a comment may quote
+# `{{ ... }}` freely.
+
+[verify]
+# The real-machine leg, run in the winner's worktree once per review round;
+# its output is fed to the fixer. A candidate worktree starts with no
+# `node_modules` — nothing earlier in the graph installs it — so the install
+# has to be its own step here.
+e2e = ["pnpm install --frozen-lockfile", "pnpm test"]
+# The final gate before merge. Kept identical to the `check` job in
+# `.github/workflows/ci.yml`: install, lint, build, test, in that order. A
+# gate that diverges from CI is the one failure this arrangement cannot
+# absorb — a clean magi run would still land a red PR.
+gate = ["pnpm install --frozen-lockfile", "pnpm lint", "pnpm build", "pnpm test"]
+
+[merge]
+mode = "none"
+# Required here, and in every jj-colocated repo: jj keeps git's HEAD detached
+# at the working-copy commit, so magi cannot infer the base branch from
+# `git symbolic-ref HEAD`.
+base = "main"
+
+# Project conventions appended to the node prompts, never merged into them.
+# Repository-wide context lives in AGENTS.md, which every agent already reads
+# from the checkout; this is the one thing a magi *node* needs to know that
+# is not there.
+[prompts]
+all = """
+This repository uses jj (Jujutsu) with a colocated git repo. `git commit` \
+works in a candidate worktree and is what magi expects, but never run `jj` \
+commands and never touch the main working copy.
+"""
