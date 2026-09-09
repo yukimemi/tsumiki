@@ -33,7 +33,6 @@ e2e = ["pnpm install --frozen-lockfile", "pnpm test"]
 gate = ["pnpm install --frozen-lockfile", "pnpm lint", "pnpm build", "pnpm test"]
 
 [merge]
-mode = "none"
 # Required here, and in every jj-colocated repo: jj keeps git's HEAD detached
 # at the working-copy commit, so magi cannot infer the base branch from
 # `git symbolic-ref HEAD`.
