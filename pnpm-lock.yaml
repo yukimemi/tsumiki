@@ -30,7 +30,7 @@ importers:
         specifier: ^7.18.3
         version: 7.18.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       zod:
-        specifier: ^4.6.2
+        specifier: ^4.6.4
         version: 4.6.4
     devDependencies:
       '@eslint/js':
