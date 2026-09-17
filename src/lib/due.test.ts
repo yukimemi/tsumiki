@@ -61,6 +61,40 @@ describe("isTaskDueOn", () => {
     expect(isTaskDueOn(task({ type: "monthly", days: [] }), "2026-08-23")).toBe(false);
   });
 
+  it("hides a daily task outside its active period", () => {
+    const silver = {
+      ...task({ type: "daily" }),
+      activeFrom: "2026-09-19",
+      activeUntil: "2026-09-23",
+    };
+    expect(isTaskDueOn(silver, "2026-09-18")).toBe(false);
+    expect(isTaskDueOn(silver, "2026-09-19")).toBe(true);
+    expect(isTaskDueOn(silver, "2026-09-23")).toBe(true);
+    expect(isTaskDueOn(silver, "2026-09-24")).toBe(false);
+  });
+
+  it("treats a missing period bound as open on that side", () => {
+    const fromOnly = { ...task({ type: "daily" }), activeFrom: "2026-09-19" };
+    expect(isTaskDueOn(fromOnly, "2026-09-18")).toBe(false);
+    expect(isTaskDueOn(fromOnly, "2026-09-19")).toBe(true);
+    expect(isTaskDueOn(fromOnly, "2027-01-01")).toBe(true);
+
+    const untilOnly = { ...task({ type: "daily" }), activeUntil: "2026-09-23" };
+    expect(isTaskDueOn(untilOnly, "2026-09-01")).toBe(true);
+    expect(isTaskDueOn(untilOnly, "2026-09-23")).toBe(true);
+    expect(isTaskDueOn(untilOnly, "2026-09-24")).toBe(false);
+  });
+
+  it("narrows a weekly task by the period as well as the weekday", () => {
+    // Mondays only, and the period ends the Friday before.
+    const mondays = {
+      ...task({ type: "weekly", weekdays: [1] }),
+      activeUntil: "2026-09-18",
+    };
+    expect(isTaskDueOn(mondays, "2026-09-14")).toBe(true); // Monday, inside
+    expect(isTaskDueOn(mondays, "2026-09-21")).toBe(false); // Monday, after
+  });
+
   it("shows a weeklyCount/monthlyCount task every day, quota is enforced elsewhere", () => {
     const weeklyCount = task({ type: "weeklyCount", count: 2 });
     const monthlyCount = task({ type: "monthlyCount", count: 1 });

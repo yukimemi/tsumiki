@@ -5,7 +5,7 @@
 // either lose a custom emoji the moment another field re-renders, or let
 // the custom input silently disagree with a chip that looks selected.
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EffectsProvider } from "../effects/EffectsProvider";
@@ -47,6 +47,7 @@ function customEmojiInput(): HTMLInputElement {
 }
 
 afterEach(() => {
+  vi.clearAllMocks();
   document.body.innerHTML = "";
 });
 
@@ -122,5 +123,66 @@ describe("TaskEditor deadline field", () => {
     fireEvent.click(screen.getByRole("radio", { name: "1かいだけ" }));
     fireEvent.click(screen.getByRole("radio", { name: "まいにち" }));
     expect(screen.queryByLabelText("きげん", { exact: false })).toBeNull();
+  });
+});
+
+describe("TaskEditor active period fields", () => {
+  const submit = () =>
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+
+  function fillTitle() {
+    fireEvent.change(screen.getByPlaceholderText("れい: おふろそうじ"), {
+      target: { value: "べんきょう 1じかん" },
+    });
+  }
+
+  function setPeriod(from: string, until: string) {
+    fireEvent.change(screen.getByLabelText("はじまるひ", { exact: false }), {
+      target: { value: from },
+    });
+    fireEvent.change(screen.getByLabelText("おわるひ", { exact: false }), {
+      target: { value: until },
+    });
+  }
+
+  it("creates a 100-coin task with a Silver Week period", async () => {
+    const { createTask } = await import("../data/tasks");
+    vi.mocked(createTask).mockResolvedValue("t1");
+    renderEditor();
+    fillTitle();
+    setPeriod("2026-09-19", "2026-09-23");
+    const coinInput = screen.getByLabelText("コインの かず") as HTMLInputElement;
+    fireEvent.change(coinInput, { target: { value: "100" } });
+    submit();
+    await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1));
+    const draft = vi.mocked(createTask).mock.lastCall![2];
+    expect(draft.coin).toBe(100);
+    expect(draft.activeFrom).toBe("2026-09-19");
+    expect(draft.activeUntil).toBe("2026-09-23");
+    expect(draft.repeat).toEqual({ type: "daily" });
+  });
+
+  it("rejects an end date before the start date", async () => {
+    const { createTask } = await import("../data/tasks");
+    renderEditor();
+    fillTitle();
+    setPeriod("2026-09-23", "2026-09-19");
+    submit();
+    expect(
+      await screen.findByText("おわるひは はじまるひと おなじか あとに してね"),
+    ).toBeTruthy();
+    expect(createTask).not.toHaveBeenCalled();
+  });
+
+  it("submits with the period left empty", async () => {
+    const { createTask } = await import("../data/tasks");
+    vi.mocked(createTask).mockResolvedValue("t1");
+    renderEditor();
+    fillTitle();
+    submit();
+    await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1));
+    const draft = vi.mocked(createTask).mock.lastCall![2];
+    expect(draft.activeFrom).toBe("");
+    expect(draft.activeUntil).toBe("");
   });
 });

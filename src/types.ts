@@ -128,6 +128,8 @@ export type Task = {
   /** Empty means anyone in the household may do it. */
   assigneeIds: string[];
   repeat: RepeatRule;
+  activeFrom?: string;
+  activeUntil?: string;
   /**
    * How many times per day this task may be completed. Undefined (or `1`)
    * means the long-standing rule: once a day, one entry. Anything higher

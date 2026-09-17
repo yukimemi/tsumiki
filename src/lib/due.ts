@@ -9,6 +9,8 @@ import { dayOfMonthKey, weekdayOfKey } from "./date";
  * only place that knows about entries.
  */
 export function isTaskDueOn(task: Task, dateKey: string): boolean {
+  if (task.activeFrom && dateKey < task.activeFrom) return false;
+  if (task.activeUntil && dateKey > task.activeUntil) return false;
   switch (task.repeat.type) {
     case "once":
     case "daily":

@@ -297,6 +297,54 @@ describe("todayRowsFor", () => {
     expect(rows[0].entry).toBe(first);
     expect(rows[0].dailyProgress).toEqual({ done: 1, count: 3 });
   });
+
+  it("hides a task outside its active period, and shows it on the boundary days", () => {
+    // Silver Week 2026: 9/19 (Sat) .. 9/23 (Wed), both ends included.
+    const study = task({
+      id: "t-study",
+      title: "べんきょう 1じかん",
+      coin: 100,
+      activeFrom: "2026-09-19",
+      activeUntil: "2026-09-23",
+    });
+    expect(rowsFor({ tasks: [study], dateKey: "2026-09-18" })).toHaveLength(0);
+    expect(rowsFor({ tasks: [study], dateKey: "2026-09-19" })).toHaveLength(1);
+    expect(rowsFor({ tasks: [study], dateKey: "2026-09-23" })).toHaveLength(1);
+    expect(rowsFor({ tasks: [study], dateKey: "2026-09-24" })).toHaveLength(0);
+  });
+
+  it("keeps the done day of a now-expired task visible with its own entry", () => {
+    // The period ended yesterday, but today's row carries yesterday's
+    // approved entry: the child must still be able to see it (and undo it)
+    // even though a fresh tap would be out of period.
+    const study = task({
+      id: "t-study",
+      activeUntil: "2026-09-22",
+    });
+    const done = entry("t-study", "kid", "2026-09-22", "approved");
+    const rows = rowsFor({
+      tasks: [study],
+      entries: [done],
+      dateKey: "2026-09-22",
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].state).toBe("approved");
+  });
+
+  it("still lists an out-of-period past completion on the family timeline via entries alone", () => {
+    // The timeline and records read entries directly, so hiding the task row
+    // on later days must not hide the completion itself.
+    const study = task({ id: "t-study", activeUntil: "2026-09-23" });
+    const done = entry("t-study", "kid", "2026-09-21", "approved", 100);
+    // On a later day the row is gone (nothing to do), ...
+    expect(
+      rowsFor({ tasks: [study], entries: [done], dateKey: "2026-09-25" }),
+    ).toHaveLength(0);
+    // ... but on its own day it stays.
+    expect(
+      rowsFor({ tasks: [study], entries: [done], dateKey: "2026-09-21" }),
+    ).toHaveLength(1);
+  });
 });
 describe("progressOf with a dailyLimit task", () => {
   it("sums coins across every entry banked today, even before the row itself is done", () => {

@@ -132,6 +132,14 @@ const schema = z
       .int("かいすうは せいすうで いれてね")
       .min(1, "1いじょうに してね")
       .max(MAX_DAILY_LIMIT, `1にちに ${MAX_DAILY_LIMIT}かいまでです`),
+    activeFrom: z.string().refine(
+      (value) => value === "" || z.iso.date().safeParse(value).success,
+      "ほんとうに ある ひづけを いれてね",
+    ),
+    activeUntil: z.string().refine(
+      (value) => value === "" || z.iso.date().safeParse(value).success,
+      "ほんとうに ある ひづけを いれてね",
+    ),
     dueDate: z
       .string()
       .refine(
@@ -147,6 +155,13 @@ const schema = z
     note: z.string().max(200, "メモは 200もじまでに してね"),
   })
   .superRefine((values, ctx) => {
+    if (values.activeFrom && values.activeUntil && values.activeFrom > values.activeUntil) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["activeUntil"],
+        message: "おわるひは はじまるひと おなじか あとに してね",
+      });
+    }
     if (values.repeatType === "weekly" && values.weekdays.length === 0) {
       ctx.addIssue({
         code: "custom",
@@ -256,6 +271,8 @@ function valuesOf(task: Task | null): FormValues {
         ? repeat.count
         : 1,
     dailyLimit: task?.dailyLimit ?? 1,
+    activeFrom: task?.activeFrom ?? "",
+    activeUntil: task?.activeUntil ?? "",
     dueDate: task?.dueDate ?? "",
     dueTime: task?.dueTime ?? "",
     note: task?.note ?? "",
@@ -289,6 +306,8 @@ function draftOf(values: FormValues, members: Member[]): TaskDraft {
     // Someone who has left the household must not keep owning a chore.
     assigneeIds: values.assigneeIds.filter((uid) => known.has(uid)),
     repeat: repeatOf(values),
+    activeFrom: values.activeFrom,
+    activeUntil: values.activeUntil,
     // Switching away from a fixed-cadence repeat drops any daily allowance
     // set while it was one — the field is meaningless anywhere else, and a
     // stale 5 hiding behind a hidden form control would be a silent trap.
@@ -363,6 +382,9 @@ export function TaskEditor(props: {
         const patch: TaskPatch = {
           ...draft,
           dueTime: draft.dueTime || null,
+          dueDate: draft.dueDate || null,
+          activeFrom: draft.activeFrom || null,
+          activeUntil: draft.activeUntil || null,
           note: draft.note || null,
           category: draft.category || null,
         };
@@ -853,6 +875,44 @@ function TaskForm(props: {
           />
         </Field>
       ) : null}
+
+      <Controller
+        control={control}
+        name="activeFrom"
+        render={({ field }) => (
+          <Field
+            label="はじまるひ（なくても いいよ）"
+            hint="このひから きょうの やることに でるよ"
+            error={messageOf(errors.activeFrom)}
+          >
+            <Input
+              type="date"
+              value={field.value}
+              onChange={(event) => field.onChange(event.target.value)}
+              className="w-40"
+            />
+          </Field>
+        )}
+      />
+
+      <Controller
+        control={control}
+        name="activeUntil"
+        render={({ field }) => (
+          <Field
+            label="おわるひ（なくても いいよ）"
+            hint="このひを すぎたら やることから きえるよ"
+            error={messageOf(errors.activeUntil)}
+          >
+            <Input
+              type="date"
+              value={field.value}
+              onChange={(event) => field.onChange(event.target.value)}
+              className="w-40"
+            />
+          </Field>
+        )}
+      />
 
       <Field
         label="じかん"
