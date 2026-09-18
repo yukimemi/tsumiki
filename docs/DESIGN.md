@@ -129,6 +129,8 @@ export type Task = {
   needsApproval: boolean;
   assigneeIds: string[];                 // [] = かぞくの誰でも
   repeat: RepeatRule;
+  activeFrom?: string;
+  activeUntil?: string;
   dailyLimit?: number;                   // 既定 1。daily/weekly/monthly のみ有効
   dueDate?: string;                      // "YYYY-MM-DD" 期限。「1かいだけ」用
   dueTime?: string;                      // "HH:mm"
@@ -212,6 +214,19 @@ export type Payout = {
   decidedAt?: Timestamp;
 };
 ```
+
+### タスクの期間
+
+`activeFrom` / `activeUntil` は省略可能な実在する `YYYY-MM-DD` 日付（Asia/Tokyo）。
+開始日・終了日を両方含み、片方が空ならその側に制限はない。両方ある場合は
+開始日 ≤ 終了日。例: `2026-09-19` ～ `2026-09-23`。期間は編集して再利用でき、
+空に戻すと `deleteField()` で削除する。
+
+期間と既存のくり返し条件を両方満たす日にだけ「きょう」のタスクを表示する。
+終了日は `dueDate`（遅れの表示用の期限）とは別で、期間外には新しい完了を案内しない。
+過去の日を選んだ場合はその日で判定する。既存の実績・承認待ち・コインは変更せず、
+「きろく」や承認キューには期間外の実績も残る。報酬（100コインも可）、1日の回数、
+承認の設定は従来どおり。期間の編集で「1かいだけ」の完了や週・月の回数はリセットしない。
 
 ## 3. 書き込みフロー（すべて `writeBatch`）
 

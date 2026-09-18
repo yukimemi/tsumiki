@@ -31,7 +31,7 @@ import { useTasks } from "../data/tasks";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
 import { addDaysKey, formatDateJa, nowHm, todayKey } from "../lib/date";
-import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
+import { activePeriodLabelJa, assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import type { Entry } from "../types";
 import { UNFILED_LABEL, groupTodayRows, progressOf, todayRowsFor } from "./today";
 import type { TodayGroup, TodayRow } from "./today";
@@ -442,6 +442,14 @@ export function TodayScreen(): JSX.Element {
                   {repeatLabelJa(detailRow.task.repeat)}
                 </dd>
               </div>
+              {detailRow.task.activeFrom || detailRow.task.activeUntil ? (
+                <div className="flex items-start justify-between gap-3">
+                  <dt className="shrink-0 text-muted">やる きかん</dt>
+                  <dd className="text-right font-bold text-ink">
+                    {activePeriodLabelJa(detailRow.task)}
+                  </dd>
+                </div>
+              ) : null}
               {detailRow.dailyProgress ? (
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-muted">きょうの かいすう</dt>

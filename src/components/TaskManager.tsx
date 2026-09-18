@@ -7,7 +7,7 @@ import {
   softDeleteTask,
   useAllTasks,
 } from "../data/tasks";
-import { assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
+import { activePeriodLabelJa, assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import {
   canMoveCategoryGroup,
   categoriesOf,
@@ -168,6 +168,9 @@ export function TaskManager(props: {
             {repeatLabelJa(task.repeat)}
             {task.dueTime ? ` ・ ${task.dueTime}まで` : ""}
           </p>
+          {task.activeFrom || task.activeUntil ? (
+            <p className="text-sm text-muted">{activePeriodLabelJa(task)}</p>
+          ) : null}
           <p className="text-sm text-muted">
             やるひと: {assigneeLabelJa(task, members)}
           </p>

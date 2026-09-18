@@ -1,4 +1,4 @@
-import { WEEKDAY_LABELS_JA } from "./date";
+import { formatDateJa, WEEKDAY_LABELS_JA } from "./date";
 import type { MemberInfo, RepeatRule, Role, Task } from "../types";
 
 /**
@@ -11,6 +11,14 @@ import type { MemberInfo, RepeatRule, Role, Task } from "../types";
  */
 
 type Member = { uid: string; role: Role; info: MemberInfo };
+
+export function activePeriodLabelJa(task: Task): string {
+  const label = (key: string) => `${key.slice(0, 4)}年${formatDateJa(key)}`;
+  return [
+    task.activeFrom ? `${label(task.activeFrom)}から` : "",
+    task.activeUntil ? `${label(task.activeUntil)}まで` : "",
+  ].filter(Boolean).join(" ");
+}
 
 function ascending(a: number, b: number): number {
   return a - b;
