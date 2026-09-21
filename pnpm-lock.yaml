@@ -64,8 +64,8 @@ importers:
         specifier: ^0.5.7
         version: 0.5.7(eslint@10.10.0(jiti@1.21.7)(supports-color@7.2.0))
       firebase-tools:
-        specifier: ^15.30.1
-        version: 15.30.1(@types/node@26.6.1)(supports-color@7.2.0)
+        specifier: ^15.30.2
+        version: 15.30.2(@types/node@26.6.1)(supports-color@7.2.0)
       globals:
         specifier: ^17.12.0
         version: 17.12.0
@@ -3978,8 +3978,8 @@ packages:
     resolution: {integrity: sha512-78/PXT1wlLLDgTzDs7sjq9hzz0vXD+zn+7wypEe4fXQxCmdmqfGsEPQxmiCSQI3ajFV91bVSsvNtrJRiW6nGng==}
     engines: {node: '>=10'}
 
-  firebase-tools@15.30.1:
-    resolution: {integrity: sha512-X8q33KzOfR4Xv1eNRCbediVzs/9OUNtF6jwyDZVfYbfnP53FrxMmklZe+Q1kUvnNFbgEf25LEeV53bPGQTEsFA==}
+  firebase-tools@15.30.2:
+    resolution: {integrity: sha512-9Y6fsgUh5CsL/hzB565iyIYdu3pgbKcONi7vRlSbZuB3d3RpZy4u49lMesKmQSGd1AqKvFyVw5ls8GCZNYy0MQ==}
     engines: {node: '>=20.0.0 || >=22.0.0 || >=24.0.0'}
     hasBin: true
 
@@ -6315,10 +6315,6 @@ packages:
   undici@7.29.0:
     resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
     engines: {node: '>=20.18.1'}
-
-  undici@8.10.0:
-    resolution: {integrity: sha512-HvltHd7avK13QIw/oLe4qoOLyoVSoafqJ2jYOrtMRBkbYT31eiBQ8O0ehRKZiEZCMEyLFQNIADpgCWC5fALvYQ==}
-    engines: {node: '>=22.19.0'}
 
   undici@8.10.2:
     resolution: {integrity: sha512-/y4/bH9YNU5hi9NIrpOuvGXFcxrj3CMrV+/AYpowAYTpHn8gX/XPFjNy766FPoYY0miQhdW977JFWKGNhBdwyQ==}
@@ -10836,7 +10832,7 @@ snapshots:
       locate-path: 6.0.0
       path-exists: 4.0.0
 
-  firebase-tools@15.30.1(@types/node@26.6.1)(supports-color@7.2.0):
+  firebase-tools@15.30.2(@types/node@26.6.1)(supports-color@7.2.0):
     dependencies:
       '@apphosting/common': 0.0.8
       '@electric-sql/pglite': 0.3.16
@@ -12074,7 +12070,7 @@ snapshots:
       semver: 7.8.5
       tar: 7.5.22
       tinyglobby: 0.2.17
-      undici: 8.10.0
+      undici: 8.10.2
       which: 7.0.0
     optional: true
 
@@ -13524,9 +13520,6 @@ snapshots:
   undici@6.28.0: {}
 
   undici@7.29.0: {}
-
-  undici@8.10.0:
-    optional: true
 
   undici@8.10.2: {}
 
