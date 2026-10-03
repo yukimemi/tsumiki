@@ -38,6 +38,8 @@ import { useHousehold } from "../household/context";
 import { dateKeyOf, formatDateJa } from "../lib/date";
 import { clampToPlan, payoutPlan } from "../lib/payout";
 import type { Entry, LedgerEntry, LedgerReason, Payout } from "../types";
+import { GRANT_LIMIT, grantDeltaOf } from "./grant";
+import type { GrantReason } from "./grant";
 import { useAction } from "./useAction";
 
 /**
@@ -48,8 +50,6 @@ import { useAction } from "./useAction";
  */
 
 /** The two reasons a parent can move coins by hand. */
-type GrantReason = Extract<LedgerReason, "bonus" | "adjust">;
-
 const GRANT_OPTIONS: readonly { value: GrantReason; label: string }[] = [
   { value: "bonus", label: "ごほうび" },
   { value: "adjust", label: "ちょうせい" },
@@ -64,15 +64,6 @@ const REASON_JA: Record<LedgerReason, string> = {
 
 /** Quick amounts for an exchange. Shown only while the balance covers them. */
 const QUICK_COINS: readonly number[] = [50, 100];
-
-const GRANT_LIMIT = 999;
-
-/** Whole coins only, inside the limit; `bonus` can never take coins away. */
-function grantDeltaOf(raw: number, reason: GrantReason): number {
-  const whole = Number.isFinite(raw) ? Math.trunc(raw) : 0;
-  const bounded = Math.max(-GRANT_LIMIT, Math.min(GRANT_LIMIT, whole));
-  return reason === "bonus" ? Math.max(0, bounded) : bounded;
-}
 
 function requestedDate(payout: Payout): string {
   return formatDateJa(dateKeyOf(payout.requestedAt.toDate()));
@@ -754,7 +745,7 @@ export function CoinsScreen(): JSX.Element {
             group
             hint={
               grantReason === "bonus"
-                ? "1から999まで"
+                ? `1から${GRANT_LIMIT}まで`
                 : "へらすときは マイナスに してね"
             }
           >
