@@ -14,7 +14,7 @@
     "rules:deploy": "tsx scripts/deploy-rules.ts"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.9.1",
+    "@hookform/resolvers": "^5.9.2",
     "date-fns": "^4.4.0",
     "firebase": "^12.19.0",
     "react": "^19.3.1",
