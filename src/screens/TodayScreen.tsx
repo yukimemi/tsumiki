@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import { useUid } from "../auth/context";
@@ -13,6 +13,7 @@ import {
   Card,
   CoinAmount,
   EmptyState,
+  FestivalBadge,
   IconButton,
   ProgressRing,
   Sheet,
@@ -26,11 +27,13 @@ import {
   useEntriesForDate,
   useRecentEntries,
 } from "../data/entries";
+import { ensureFestivalDraw, useFestivalDraw } from "../data/festivals";
 import { uploadEntryPhoto } from "../data/photos";
 import { useTasks } from "../data/tasks";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
 import { addDaysKey, formatDateJa, nowHm, todayKey } from "../lib/date";
+import { resolveTaskReward } from "../lib/festival";
 import { activePeriodLabelJa, assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import type { Entry } from "../types";
 import { UNFILED_LABEL, groupTodayRows, progressOf, todayRowsFor } from "./today";
@@ -89,6 +92,41 @@ export function TodayScreen(): JSX.Element {
   const tasks = useTasks(householdId);
   const dayEntries = useEntriesForDate(householdId, dateKey);
   const recentEntries = useRecentEntries(householdId);
+  const festivalDraw = useFestivalDraw(householdId, dateKey);
+  const [drawError, setDrawError] = useState<string | null>(null);
+
+  // Fix the random festival draw once per household + dateKey when the day
+  // is not in the future and random festival settings are enabled.
+  useEffect(() => {
+    if (
+      isFuture ||
+      !householdId ||
+      !household?.festival?.enabled ||
+      tasks.loading ||
+      tasks.error !== null ||
+      festivalDraw.loading ||
+      festivalDraw.data !== null
+    ) {
+      return;
+    }
+    void ensureFestivalDraw({
+      householdId,
+      dateKey,
+      settings: household.festival,
+      memberIds: members.map((member) => member.uid),
+    }).then(() => setDrawError(null), () => setDrawError(dateKey));
+  }, [
+    isFuture,
+    householdId,
+    household?.festival,
+    dateKey,
+    members,
+    tasks.loading,
+    tasks.error,
+    tasks.data,
+    festivalDraw.loading,
+    festivalDraw.data,
+  ]);
 
   // A `once` task retires as soon as it has an entry on ANY day, so the row
   // builder is fed more than the shown day. The recent window is the
@@ -105,6 +143,7 @@ export function TodayScreen(): JSX.Element {
     dateKey,
     todayKey: today,
     nowHm: nowHm(),
+    festivalDraw: festivalDraw.data,
   });
 
   const groups = groupTodayRows(rows);
@@ -121,8 +160,9 @@ export function TodayScreen(): JSX.Element {
 
   const progress = progressOf(rows);
   const coinYen = household?.coinYen ?? 0;
-  const loading = tasks.loading || dayEntries.loading;
-  const loadFailed = tasks.error !== null || dayEntries.error !== null;
+  const loading = tasks.loading || dayEntries.loading || festivalDraw.loading;
+  const loadFailed = tasks.error !== null || dayEntries.error !== null ||
+    festivalDraw.error !== null || drawError === dateKey;
 
   const commentsRow =
     rows.find((row) => row.task.id === commentsTaskId && row.entry !== null) ??
@@ -161,6 +201,16 @@ export function TodayScreen(): JSX.Element {
     file?: File,
   ): void => {
     void action.run(async () => {
+      // Never use a row's provisional reward: the persisted draw may still
+      // be loading. A failed read/create stops completion and is retryable.
+      const draw = await ensureFestivalDraw({
+        householdId: row.task.householdId,
+        dateKey,
+        settings: household?.festival,
+        memberIds: members.map((member) => member.uid),
+      });
+      setDrawError(null);
+      const reward = resolveTaskReward(row.task, dateKey, draw);
       // Upload before the entry write. A path recorded for an object that
       // never arrived would render as a permanently broken photo. Keyed to
       // whichever slot this tap will land on, so two completions on the
@@ -182,13 +232,14 @@ export function TodayScreen(): JSX.Element {
         uid,
         row.entries,
         photoPath,
+        reward.multiplier,
       );
       celebrate("stack", { origin });
       // Pending coins are a promise, not earnings: only an approved landing
       // gets the coin flight and the shockwave. A pending one still gets an
       // answer back — the wish — so a tap is never met with silence.
       if (status === "approved") {
-        celebrate("coinfly", { coin: row.task.coin, origin });
+        celebrate("coinfly", { coin: reward.coin, origin });
         celebrate("burst", { origin });
       } else {
         celebrate("wish", { origin });
@@ -412,9 +463,14 @@ export function TodayScreen(): JSX.Element {
                 {detailRow.task.emoji}
               </span>
               {/* No clamp here — reading the whole name is the point. */}
-              <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-ink">
-                {detailRow.task.title}
-              </h3>
+              <div className="min-w-0 flex-1 space-y-1">
+                <h3 className="text-lg font-bold leading-snug text-ink">
+                  {detailRow.task.title}
+                </h3>
+                {detailRow.festivalMultiplier ? (
+                  <FestivalBadge multiplier={detailRow.festivalMultiplier} />
+                ) : null}
+              </div>
             </div>
 
             {detailRow.task.note ? (
@@ -428,9 +484,16 @@ export function TodayScreen(): JSX.Element {
                 <dt className="text-muted">もらえる コイン</dt>
                 <dd>
                   <CoinAmount
-                    coins={detailRow.task.coin}
+                    coins={detailRow.effectiveCoin}
+                    baseCoins={
+                      detailRow.festivalMultiplier
+                        ? detailRow.baseCoin
+                        : undefined
+                    }
                     yen={
-                      coinYen > 0 ? detailRow.task.coin * coinYen : undefined
+                      coinYen > 0
+                        ? detailRow.effectiveCoin * coinYen
+                        : undefined
                     }
                     size="sm"
                   />

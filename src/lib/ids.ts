@@ -47,6 +47,11 @@ export function balanceId(householdId: string, memberId: string): string {
   return `${householdId}${SEP}${memberId}`;
 }
 
+/** One random festival draw document per (household, dateKey) pair. */
+export function festivalDrawId(householdId: string, dateKey: string): string {
+  return `${householdId}${SEP}${dateKey}`;
+}
+
 /**
  * Firestore map keys cannot contain a dot, so emails used as keys in
  * `Household.pendingRoles` are percent-encoded.

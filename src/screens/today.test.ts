@@ -647,3 +647,74 @@ describe("progressOf", () => {
     expect(progressOf(rows)).toEqual({ done: 1, total: 3, coins: 3 });
   });
 });
+
+describe("todayRowsFor festival rewards", () => {
+  it("applies random festival draw multiplier and prioritizes manual festival override", () => {
+    const tRandom = task({ id: "t-random", coin: 10, order: 0 });
+    const tBoth = task({
+      id: "t-both",
+      coin: 10,
+      order: 1,
+      manualFestivals: { [TODAY]: 5 },
+    });
+    const tNormal = task({ id: "t-normal", coin: 10, order: 2 });
+
+    const rows = todayRowsFor({
+      tasks: [tRandom, tBoth, tNormal],
+      entries: [],
+      memberId: "kid",
+      dateKey: TODAY,
+      todayKey: TODAY,
+      nowHm: "10:00",
+      festivalDraw: {
+        id: `h1__${TODAY}`,
+        householdId: "h1",
+        dateKey: TODAY,
+        taskIds: ["t-random", "t-both"],
+        multiplier: 3,
+        taskMultipliers: { "t-random": 3, "t-both": 3 },
+      },
+    });
+
+    expect(rows.map((r) => ({
+      id: r.task.id,
+      baseCoin: r.baseCoin,
+      effectiveCoin: r.effectiveCoin,
+      festivalMultiplier: r.festivalMultiplier,
+    }))).toEqual([
+      {
+        id: "t-random",
+        baseCoin: 10,
+        effectiveCoin: 30,
+        festivalMultiplier: 3,
+      },
+      {
+        id: "t-both",
+        baseCoin: 10,
+        effectiveCoin: 50,
+        festivalMultiplier: 5,
+      },
+      {
+        id: "t-normal",
+        baseCoin: 10,
+        effectiveCoin: 10,
+        festivalMultiplier: undefined,
+      },
+    ]);
+  });
+
+  it("preserves the settled entry's festival snapshot even if the task's manual festival is later cleared", () => {
+    const t = task({ id: "t1", coin: 10 });
+    const done: Entry = {
+      ...entry("t1", "kid", TODAY, "approved", 40),
+      baseCoin: 10,
+      festivalMultiplier: 4,
+    };
+
+    const rows = rowsFor({ tasks: [t], entries: [done] });
+    expect(rows[0].baseCoin).toBe(10);
+    expect(rows[0].effectiveCoin).toBe(40);
+    expect(rows[0].festivalMultiplier).toBe(4);
+    expect(progressOf(rows)).toEqual({ done: 1, total: 1, coins: 40 });
+  });
+});

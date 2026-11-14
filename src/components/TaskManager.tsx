@@ -2,11 +2,19 @@ import { useState } from "react";
 import type { JSX } from "react";
 
 import {
+  clearTaskManualFestival,
   reorderTasks,
   setTaskArchived,
+  setTaskManualFestival,
   softDeleteTask,
   useAllTasks,
 } from "../data/tasks";
+import { addDaysKey, formatDateJa, todayKey } from "../lib/date";
+import {
+  FESTIVAL_MULTIPLIERS,
+  isValidFestivalMultiplier,
+  manualFestivalSchema,
+} from "../lib/festival";
 import { activePeriodLabelJa, assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import {
   canMoveCategoryGroup,
@@ -25,7 +33,12 @@ import {
   CoinAmount,
   ConfirmDialog,
   EmptyState,
+  FestivalBadge,
+  Field,
   IconButton,
+  Input,
+  SegmentedControl,
+  Sheet,
   Skeleton,
 } from "./ui";
 
@@ -41,6 +54,11 @@ import {
  */
 
 type Member = { uid: string; role: Role; info: MemberInfo };
+
+const MANUAL_MULTIPLIER_OPTIONS = FESTIVAL_MULTIPLIERS.map((m) => ({
+  value: String(m),
+  label: `×${m}`,
+}));
 
 export function TaskManager(props: {
   householdId: string;
@@ -60,11 +78,48 @@ export function TaskManager(props: {
   const [deleting, setDeleting] = useState<Task | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
+  const today = todayKey();
+  const [festivalTaskId, setFestivalTaskId] = useState<string | null>(null);
+  const [festivalDateKey, setFestivalDateKey] = useState(today);
+  const [festivalMultiplier, setFestivalMultiplier] = useState("3");
+
   const all = tasks.data;
   const active = all.filter((task) => !task.archived);
   const archived = all.filter((task) => task.archived);
   const activeGroups = groupTasksByCategory(active);
   const archivedGroups = groupTasksByCategory(archived);
+
+  const festivalTask = all.find((task) => task.id === festivalTaskId) ?? null;
+
+  const openFestivalSheet = (task: Task, dateKey = today) => {
+    const existing = task.manualFestivals?.[dateKey];
+    setFestivalTaskId(task.id);
+    setFestivalDateKey(dateKey);
+    setFestivalMultiplier(
+      isValidFestivalMultiplier(existing) ? String(existing) : "3",
+    );
+  };
+
+  const handleSaveManualFestival = async () => {
+    if (!festivalTask) return;
+    const parsed = manualFestivalSchema.safeParse({
+      dateKey: festivalDateKey,
+      multiplier: Number.parseInt(festivalMultiplier, 10),
+    });
+    if (!parsed.success) return;
+    const ok = await action.run(() =>
+      setTaskManualFestival(
+        festivalTask.id,
+        parsed.data.dateKey,
+        parsed.data.multiplier,
+      ),
+    );
+    if (ok) setFestivalTaskId(null);
+  };
+
+  const handleClearManualFestival = async (taskId: string, dateKey: string) => {
+    await action.run(() => clearTaskManualFestival(taskId, dateKey));
+  };
 
   /**
    * Swap two rows inside `list`, then send every id in its new order:
@@ -147,85 +202,135 @@ export function TaskManager(props: {
     );
   };
 
-  const row = (task: Task, list: Task[], index: number) => (
-    <Card key={task.id} className="space-y-2">
-      <div className="flex items-start gap-3">
-        <span className="flex-none text-3xl" aria-hidden="true">
-          {task.emoji}
-        </span>
+  const manualEntriesFor = (task: Task): [string, number][] =>
+    Object.entries(task.manualFestivals ?? {})
+      .filter(([, mult]) => isValidFestivalMultiplier(mult))
+      .sort(([a], [b]) => a.localeCompare(b));
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-base font-bold text-ink">
-              {task.title}
-            </span>
-            {task.needsApproval ? (
-              <Badge tone="wait">しょうにん あり</Badge>
+  const row = (task: Task, list: Task[], index: number) => {
+    const manualEntries = manualEntriesFor(task);
+    return (
+      <Card key={task.id} className="space-y-2">
+        <div className="flex items-start gap-3">
+          <span className="flex-none text-3xl" aria-hidden="true">
+            {task.emoji}
+          </span>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-base font-bold text-ink">
+                {task.title}
+              </span>
+              {task.needsApproval ? (
+                <Badge tone="wait">しょうにん あり</Badge>
+              ) : null}
+            </div>
+
+            <p className="mt-0.5 text-sm text-muted">
+              {repeatLabelJa(task.repeat)}
+              {task.dueTime ? ` ・ ${task.dueTime}まで` : ""}
+            </p>
+            {task.activeFrom || task.activeUntil ? (
+              <p className="text-sm text-muted">{activePeriodLabelJa(task)}</p>
+            ) : null}
+            <p className="text-sm text-muted">
+              やるひと: {assigneeLabelJa(task, members)}
+            </p>
+
+            {manualEntries.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {manualEntries.map(([dateKey, mult]) => (
+                  <span
+                    key={dateKey}
+                    className="inline-flex items-center gap-1.5 rounded-pill border border-coin/50 bg-coin/10 px-2 py-0.5 text-xs font-bold text-ink"
+                  >
+                    <span>{formatDateJa(dateKey)}</span>
+                    <FestivalBadge
+                      multiplier={mult}
+                      baseCoins={task.coin}
+                      coins={task.coin * mult}
+                    />
+                    <button
+                      type="button"
+                      aria-label={`${task.title} の ${formatDateJa(dateKey)} の お祭りを やめる`}
+                      disabled={action.busy}
+                      onClick={() =>
+                        void handleClearManualFestival(task.id, dateKey)
+                      }
+                      className="ml-0.5 rounded-pill px-1 text-muted hover:text-late focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-self"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
             ) : null}
           </div>
 
-          <p className="mt-0.5 text-sm text-muted">
-            {repeatLabelJa(task.repeat)}
-            {task.dueTime ? ` ・ ${task.dueTime}まで` : ""}
-          </p>
-          {task.activeFrom || task.activeUntil ? (
-            <p className="text-sm text-muted">{activePeriodLabelJa(task)}</p>
-          ) : null}
-          <p className="text-sm text-muted">
-            やるひと: {assigneeLabelJa(task, members)}
-          </p>
+          <CoinAmount
+            coins={task.coin}
+            yen={coinYen > 0 ? task.coin * coinYen : undefined}
+            size="sm"
+            className="flex-none"
+          />
         </div>
 
-        <CoinAmount
-          coins={task.coin}
-          yen={coinYen > 0 ? task.coin * coinYen : undefined}
-          size="sm"
-          className="flex-none"
-        />
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          onClick={() => setEditing({ task })}
-          disabled={action.busy}
-        >
-          なおす
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => setArchived(task, !task.archived)}
-          disabled={action.busy}
-        >
-          {task.archived ? "もどす" : "しまう"}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => setDeleting(task)}
-          disabled={action.busy}
-        >
-          けす
-        </Button>
-
-        <span className="ml-auto flex flex-none gap-1">
-          <IconButton
-            label={`${task.title} を うえに うごかす`}
-            disabled={action.busy || index === 0}
-            onClick={() => swap(list, index, -1)}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => setEditing({ task })}
+            disabled={action.busy}
           >
-            ↑
-          </IconButton>
-          <IconButton
-            label={`${task.title} を したに うごかす`}
-            disabled={action.busy || index === list.length - 1}
-            onClick={() => swap(list, index, 1)}
+            なおす
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => openFestivalSheet(task)}
+            disabled={action.busy}
           >
-            ↓
-          </IconButton>
-        </span>
-      </div>
-    </Card>
-  );
+            🎉 おまつり
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setArchived(task, !task.archived)}
+            disabled={action.busy}
+          >
+            {task.archived ? "もどす" : "しまう"}
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setDeleting(task)}
+            disabled={action.busy}
+          >
+            けす
+          </Button>
+
+          <span className="ml-auto flex flex-none gap-1">
+            <IconButton
+              label={`${task.title} を うえに うごかす`}
+              disabled={action.busy || index === 0}
+              onClick={() => swap(list, index, -1)}
+            >
+              ↑
+            </IconButton>
+            <IconButton
+              label={`${task.title} を したに うごかす`}
+              disabled={action.busy || index === list.length - 1}
+              onClick={() => swap(list, index, 1)}
+            >
+              ↓
+            </IconButton>
+          </span>
+        </div>
+      </Card>
+    );
+  };
+
+  const parsedFestivalMultiplier = Number.parseInt(festivalMultiplier, 10);
+  const festivalValidation = manualFestivalSchema.safeParse({
+    dateKey: festivalDateKey,
+    multiplier: parsedFestivalMultiplier,
+  });
 
   return (
     <section className="space-y-3">
@@ -327,6 +432,109 @@ export function TaskManager(props: {
         taskCount={taskCount}
         onClose={() => setEditing(null)}
       />
+
+      <Sheet
+        open={festivalTask !== null}
+        onClose={() => setFestivalTaskId(null)}
+        title={
+          festivalTask
+            ? `${festivalTask.emoji} ${festivalTask.title} の お祭りタイム`
+            : "お祭りタイム"
+        }
+      >
+        {festivalTask ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted">
+              えらんだ 日だけ、この やることの コインを お祭りタイム（2〜5倍）に します。ランダムお祭りよりも こちらが 優先されます。
+            </p>
+
+            <Field label="お祭りに する ひづけ">
+              <div className="space-y-2">
+                <Input
+                  type="date"
+                  value={festivalDateKey}
+                  onChange={(event) => {
+                    const nextDate = event.target.value;
+                    setFestivalDateKey(nextDate);
+                    const existing = festivalTask.manualFestivals?.[nextDate];
+                    if (isValidFestivalMultiplier(existing)) {
+                      setFestivalMultiplier(String(existing));
+                    }
+                  }}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setFestivalDateKey(today)}
+                  >
+                    きょう（{formatDateJa(today)}）
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setFestivalDateKey(addDaysKey(today, 1))}
+                  >
+                    あした（{formatDateJa(addDaysKey(today, 1))}）
+                  </Button>
+                </div>
+              </div>
+            </Field>
+
+            <Field label="コインの ばいりつ（2〜5倍）" group>
+              <SegmentedControl
+                label="お祭りタイムのばいりつ"
+                value={festivalMultiplier}
+                options={MANUAL_MULTIPLIER_OPTIONS}
+                onChange={setFestivalMultiplier}
+                className="w-full"
+              />
+            </Field>
+
+            {isValidFestivalMultiplier(parsedFestivalMultiplier) ? (
+              <div className="flex items-center justify-between rounded-card border border-coin/50 bg-coin/10 p-3">
+                <FestivalBadge multiplier={parsedFestivalMultiplier} />
+                <CoinAmount
+                  coins={festivalTask.coin * parsedFestivalMultiplier}
+                  baseCoins={festivalTask.coin}
+                  yen={
+                    coinYen > 0
+                      ? festivalTask.coin * parsedFestivalMultiplier * coinYen
+                      : undefined
+                  }
+                  size="sm"
+                />
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="coin"
+                block
+                disabled={!festivalValidation.success || action.busy}
+                onClick={() => void handleSaveManualFestival()}
+              >
+                🎉 お祭りタイムに する
+              </Button>
+              {isValidFestivalMultiplier(
+                festivalTask.manualFestivals?.[festivalDateKey],
+              ) ? (
+                <Button
+                  variant="ghost"
+                  block
+                  disabled={action.busy}
+                  onClick={() =>
+                    void handleClearManualFestival(
+                      festivalTask.id,
+                      festivalDateKey,
+                    )
+                  }
+                >
+                  この日の お祭りを やめる
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </Sheet>
 
       <ConfirmDialog
         open={deleting !== null}

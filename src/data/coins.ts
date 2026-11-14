@@ -43,6 +43,8 @@ export type CoinMovement = {
   householdId: string;
   memberId: string;
   delta: number;
+  baseCoin?: number;
+  festivalMultiplier?: number;
   reason: LedgerReason;
   entryId?: string;
   payoutId?: string;

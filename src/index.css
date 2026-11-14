@@ -612,6 +612,30 @@ body {
 }
 
 /*
+ * Festival time badge — high-contrast coin slot pill with a gentle pulse
+ * scaled by var(--fx), so calm mode and reduced-motion keep the badge static.
+ */
+.tsu-festival-badge {
+  background: var(--coin);
+  color: var(--on-coin);
+  border: 1px solid rgb(from var(--on-coin) r g b / 0.25);
+  box-shadow:
+    0 1px 2px rgb(from var(--ink) r g b / 0.12),
+    0 0 calc(12px * var(--glow)) rgb(from var(--coin) r g b / 0.75);
+  animation: tsu-festival-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes tsu-festival-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(calc(1 + 0.04 * var(--fx)));
+  }
+}
+
+/*
  * Calm: the celebrations off, the app unchanged. Element-carried effects
  * only lose their animation — the row has to stay where it is. Overlay
  * effects are also pinned back to opacity 0, because with the clock
@@ -619,6 +643,7 @@ body {
  */
 :root[data-motion="calm"] .tsu-stack,
 :root[data-motion="calm"] .tsu-pop,
+:root[data-motion="calm"] .tsu-festival-badge,
 :root[data-motion="calm"].tsu-quake-a,
 :root[data-motion="calm"].tsu-quake-b {
   animation: none !important;
@@ -647,6 +672,7 @@ body {
 
   .tsu-stack,
   .tsu-pop,
+  .tsu-festival-badge,
   .tsu-quake-a,
   .tsu-quake-b,
   .animate-fade-in-up,

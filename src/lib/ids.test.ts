@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { balanceId, entryId, entrySeq, virtualMemberId } from "./ids";
+import { balanceId, entryId, entrySeq, festivalDrawId, virtualMemberId } from "./ids";
 
 describe("entrySeq", () => {
   it("inverts entryId for the first slot and any slot beyond it", () => {
@@ -8,6 +8,18 @@ describe("entrySeq", () => {
       const id = entryId("task-1", "member-1", "2026-08-30", seq);
       expect(entrySeq(id, "task-1", "member-1", "2026-08-30")).toBe(seq);
     }
+  });
+});
+
+describe("festivalDrawId", () => {
+  it("builds a deterministic per-household per-date id", () => {
+    expect(festivalDrawId("h1", "2026-08-23")).toBe("h1__2026-08-23");
+    expect(festivalDrawId("h1", "2026-08-23")).toBe(
+      festivalDrawId("h1", "2026-08-23"),
+    );
+    expect(festivalDrawId("h1", "2026-08-24")).not.toBe(
+      festivalDrawId("h1", "2026-08-23"),
+    );
   });
 });
 

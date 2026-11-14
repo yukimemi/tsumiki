@@ -3,7 +3,7 @@ import type { JSX, MouseEvent as ReactMouseEvent } from "react";
 
 import { STACK_MS } from "../effects/effects";
 import type { TodayRow } from "../screens/today";
-import { CoinAmount, IconButton } from "./ui";
+import { CoinAmount, FestivalBadge, IconButton } from "./ui";
 import type { Tone } from "./ui";
 
 /**
@@ -36,7 +36,9 @@ export function TaskRow(props: {
   onOpenComments(): void;
 }): JSX.Element {
   const { row, coinYen, busy = false, canUndo } = props;
-  const { task, entry, state } = row;
+  const { task, entry, state, festivalMultiplier, baseCoin, effectiveCoin } = row;
+  const isFestival =
+    festivalMultiplier !== undefined && festivalMultiplier >= 2;
 
   // True for one STACK_MS after a completion tap so the block-drop keyframes
   // play. Removed on animationend — re-adding the same class restarts
@@ -55,7 +57,11 @@ export function TaskRow(props: {
     <div
       className={[
         "card flex items-stretch gap-1 p-2",
-        state === "late" ? "border-late/50 bg-late/10" : "",
+        state === "late"
+          ? "border-late/50 bg-late/10"
+          : isFestival
+            ? "border-coin/60 bg-coin/10 shadow-glow-coin"
+            : "",
         stacking ? "tsu-stack" : "",
       ]
         .filter(Boolean)
@@ -87,32 +93,38 @@ export function TaskRow(props: {
           <span className="line-clamp-2 text-base font-bold text-ink">
             {task.title}
           </span>
-          {pill ? (
-            <span
-              className={`mt-0.5 inline-flex items-center whitespace-nowrap rounded-pill border px-2 py-0.5 text-xs font-bold ${
-                {
-                  neutral: "border-rule bg-sunk text-muted",
-                  coin: "border-coin/40 bg-coin/15 text-ink",
-                  done: "border-done/40 bg-done/15 text-done",
-                  wait: "border-wait/40 bg-wait/15 text-wait",
-                  late: "border-late/40 bg-late/15 text-late",
-                  self: "border-self/40 bg-self/15 text-self",
-                }[pill.tone]
-              }`}
-            >
-              {pill.text}
-            </span>
-          ) : null}
-          {row.dailyProgress ? (
-            <span className="mt-0.5 ml-1 inline-flex items-center whitespace-nowrap rounded-pill border border-rule bg-sunk px-2 py-0.5 text-xs font-bold tabular-nums text-muted">
-              {row.dailyProgress.done}/{row.dailyProgress.count}かい
-            </span>
-          ) : null}
+          <span className="mt-0.5 flex flex-wrap items-center gap-1">
+            {isFestival && festivalMultiplier ? (
+              <FestivalBadge multiplier={festivalMultiplier} />
+            ) : null}
+            {pill ? (
+              <span
+                className={`inline-flex items-center whitespace-nowrap rounded-pill border px-2 py-0.5 text-xs font-bold ${
+                  {
+                    neutral: "border-rule bg-sunk text-muted",
+                    coin: "border-coin/40 bg-coin/15 text-ink",
+                    done: "border-done/40 bg-done/15 text-done",
+                    wait: "border-wait/40 bg-wait/15 text-wait",
+                    late: "border-late/40 bg-late/15 text-late",
+                    self: "border-self/40 bg-self/15 text-self",
+                  }[pill.tone]
+                }`}
+              >
+                {pill.text}
+              </span>
+            ) : null}
+            {row.dailyProgress ? (
+              <span className="inline-flex items-center whitespace-nowrap rounded-pill border border-rule bg-sunk px-2 py-0.5 text-xs font-bold tabular-nums text-muted">
+                {row.dailyProgress.done}/{row.dailyProgress.count}かい
+              </span>
+            ) : null}
+          </span>
         </span>
 
         <CoinAmount
-          coins={task.coin}
-          yen={coinYen > 0 ? task.coin * coinYen : undefined}
+          coins={effectiveCoin}
+          baseCoins={isFestival ? baseCoin : undefined}
+          yen={coinYen > 0 ? effectiveCoin * coinYen : undefined}
           size="sm"
           className="flex-none"
         />

@@ -16,14 +16,28 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  FestivalBadge,
   Field,
   Input,
+  SegmentedControl,
   Select,
+  Toggle,
 } from "../components/ui";
-import { deleteHousehold, updateHousehold } from "../data/households";
+import {
+  deleteHousehold,
+  updateHousehold,
+  updateHouseholdFestival,
+} from "../data/households";
 import { useHousehold } from "../household/context";
 import { isAdminEmail } from "../lib/admin";
+import { todayKey } from "../lib/date";
+import {
+  DEFAULT_FESTIVAL_SETTINGS,
+  FESTIVAL_MULTIPLIERS,
+  festivalSettingsSchema,
+} from "../lib/festival";
 import { payoutPlan } from "../lib/payout";
+import type { FestivalSettings } from "../types";
 import { useAction } from "./useAction";
 
 /**
@@ -102,6 +116,12 @@ export function SettingsScreen() {
       </Card>
 
       {isParent ? <FreeTierAd plan={household.plan ?? "free"} /> : null}
+
+      <FestivalSettingsCard
+        householdId={household.id}
+        festival={household.festival}
+        canEdit={isParent}
+      />
 
       <Card>
         <h2 className="mb-3 text-base font-bold text-ink">やること</h2>
@@ -366,5 +386,156 @@ function DeleteHousehold(props: { id: string; name: string }) {
         }
       />
     </>
+  );
+}
+
+const MULTIPLIER_OPTIONS = FESTIVAL_MULTIPLIERS.map((m) => ({
+  value: String(m),
+  label: `×${m}`,
+}));
+
+function FestivalSettingsCard(props: {
+  householdId: string;
+  festival: FestivalSettings | undefined;
+  canEdit: boolean;
+}) {
+  const action = useAction();
+  const initial = props.festival ?? DEFAULT_FESTIVAL_SETTINGS;
+
+  const [enabled, setEnabled] = useState(initial.enabled);
+  const [intervalDays, setIntervalDays] = useState(
+    String(initial.intervalDays),
+  );
+  const [taskCount, setTaskCount] = useState(String(initial.taskCount));
+  const [multiplier, setMultiplier] = useState(String(initial.multiplier));
+
+  const parsedInterval = Number.parseInt(intervalDays, 10);
+  const parsedCount = Number.parseInt(taskCount, 10);
+  const parsedMultiplier = Number.parseInt(multiplier, 10);
+
+  const validation = festivalSettingsSchema.safeParse({
+    enabled,
+    intervalDays: parsedInterval,
+    taskCount: parsedCount,
+    multiplier: parsedMultiplier,
+    anchorDate: props.festival?.anchorDate ?? todayKey(),
+  });
+
+  const intervalValid =
+    Number.isInteger(parsedInterval) &&
+    parsedInterval >= 1 &&
+    parsedInterval <= 30;
+  const countValid =
+    Number.isInteger(parsedCount) && parsedCount >= 1 && parsedCount <= 30;
+  const multiplierValid =
+    Number.isInteger(parsedMultiplier) &&
+    parsedMultiplier >= 2 &&
+    parsedMultiplier <= 5;
+  const valid = validation.success;
+
+  const dirty =
+    enabled !== initial.enabled ||
+    parsedInterval !== initial.intervalDays ||
+    parsedCount !== initial.taskCount ||
+    parsedMultiplier !== initial.multiplier;
+
+  const save = () => {
+    if (!validation.success) return;
+    void action.run(() =>
+      updateHouseholdFestival(props.householdId, validation.data),
+    );
+  };
+
+  return (
+    <Card>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-base font-bold text-ink">🎉 お祭りタイム</h2>
+        {enabled && multiplierValid ? (
+          <FestivalBadge multiplier={parsedMultiplier} />
+        ) : null}
+      </div>
+
+      <p className="mb-3 text-sm text-muted">
+        たまにおとずれるボーナスタイム！えらばれた やることの コインが ふえます。
+      </p>
+
+      {props.canEdit ? (
+        <div className="flex flex-col gap-3">
+          <Toggle
+            checked={enabled}
+            onChange={setEnabled}
+            label="ランダムお祭りタイムを つかう"
+            hint="きめた 日数ごとに、その日の やることから ランダムで お祭りになります"
+          />
+
+          <Field
+            label="なん日ごとに ひらく？（N日）"
+            hint="1 にすると まいにち、3 にすると 3日ごとに お祭りタイムが きます"
+            error={
+              intervalValid
+                ? undefined
+                : "1〜30 の せいすうで いれてください"
+            }
+          >
+            <Input
+              inputMode="numeric"
+              value={intervalDays}
+              onChange={(event) => setIntervalDays(event.target.value)}
+            />
+          </Field>
+
+          <Field
+            label="ランダムで えらぶ やることの かず（Kこ）"
+            hint="その日に 予定されている やることから えらびます（おうちのひとが えらんだ お祭りは 別枠です）"
+            error={
+              countValid ? undefined : "1〜30 の せいすうで いれてください"
+            }
+          >
+            <Input
+              inputMode="numeric"
+              value={taskCount}
+              onChange={(event) => setTaskCount(event.target.value)}
+            />
+          </Field>
+
+          <Field
+            label="お祭りタイムの コインばいりつ（2〜5倍）"
+            error={
+              multiplierValid ? undefined : "2〜5倍 から えらんでください"
+            }
+            group
+          >
+            <SegmentedControl
+              label="お祭りタイムのばいりつ"
+              value={multiplier}
+              options={MULTIPLIER_OPTIONS}
+              onChange={setMultiplier}
+              className="w-full"
+            />
+          </Field>
+
+          {action.error ? <Badge tone="late">{action.error}</Badge> : null}
+
+          <Button
+            onClick={save}
+            disabled={!dirty || !valid || action.busy}
+            block
+          >
+            お祭りタイムの せっていを ほぞんする
+          </Button>
+        </div>
+      ) : (
+        <dl className="flex flex-col gap-2 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-muted">ランダムお祭りタイム</dt>
+            <dd className="font-bold text-ink">
+              {initial.enabled
+                ? `${initial.intervalDays}日ごとに ${initial.taskCount}こ が ×${initial.multiplier}`
+                : "おやすみちゅう"}
+            </dd>
+          </div>
+        </dl>
+      )}
+    </Card>
   );
 }
