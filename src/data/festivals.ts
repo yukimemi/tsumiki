@@ -52,12 +52,11 @@ export function useFestivalDraw(
 export async function ensureFestivalDraw(input: {
   householdId: string;
   dateKey: string;
-  tasks: readonly Task[];
   memberIds: readonly string[];
   settings: FestivalSettings | undefined;
   rng?: () => number;
 }): Promise<FestivalDraw | null> {
-  const { householdId, dateKey, tasks, memberIds, settings, rng } = input;
+  const { householdId, dateKey, memberIds, settings, rng } = input;
 
   const id = festivalDrawId(householdId, dateKey);
   const running = inFlight.get(id);
@@ -74,10 +73,19 @@ export async function ensureFestivalDraw(input: {
       if (!settings || !isFestivalDay(dateKey, settings)) return null;
       // The recent timeline is capped; retirement needs the full history.
       // Read from the server so an incomplete offline cache cannot spend K.
-      const history = await getDocsFromServer(query(
-        collection(firestore, "entries"),
-        where("householdId", "==", householdId),
-      ));
+      // Live task subscriptions may still be serving cached schedules. Never
+      // turn that temporary view into the family's immutable daily draw.
+      const [history, taskSnapshot] = await Promise.all([
+        getDocsFromServer(query(
+          collection(firestore, "entries"),
+          where("householdId", "==", householdId),
+        )),
+        getDocsFromServer(query(
+          collection(firestore, "tasks"),
+          where("householdId", "==", householdId),
+        )),
+      ]);
+      const tasks = taskSnapshot.docs.map((task) => ({ ...task.data(), id: task.id }) as Task);
       const entries = history.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Entry);
       const drawn = drawFestivalTasks({
         householdId,

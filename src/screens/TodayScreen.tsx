@@ -113,7 +113,6 @@ export function TodayScreen(): JSX.Element {
       householdId,
       dateKey,
       settings: household.festival,
-      tasks: tasks.data,
       memberIds: members.map((member) => member.uid),
     }).then(() => setDrawError(null), () => setDrawError(dateKey));
   }, [
@@ -208,7 +207,6 @@ export function TodayScreen(): JSX.Element {
         householdId: row.task.householdId,
         dateKey,
         settings: household?.festival,
-        tasks: tasks.data,
         memberIds: members.map((member) => member.uid),
       });
       setDrawError(null);

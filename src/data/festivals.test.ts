@@ -4,16 +4,18 @@ import type { FestivalDraw, FestivalSettings, Task } from "../types";
 const store = new Map<string, Record<string, unknown>>();
 const setSpy = vi.fn();
 const historySpy = vi.hoisted(() => vi.fn());
+const tasksSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/firebase", () => ({
   db: () => ({}),
 }));
 
 vi.mock("firebase/firestore", () => ({
-  collection: vi.fn(),
-  query: vi.fn(),
-  where: vi.fn(),
-  getDocsFromServer: historySpy,
+  collection: (_db: unknown, name: string) => name,
+  query: (name: string, filter: unknown) => ({ name, filter }),
+  where: (field: string, operator: string, value: string) => ({ field, operator, value }),
+  getDocsFromServer: (query: { name: string; filter: unknown }) =>
+    query.name === "tasks" ? tasksSpy(query.filter) : historySpy(query.filter),
   doc: (_db: unknown, col: string, id: string) => ({
     id,
     path: `${col}/${id}`,
@@ -86,18 +88,23 @@ beforeEach(() => {
   store.clear();
   setSpy.mockClear();
   historySpy.mockReset().mockResolvedValue({ docs: [] });
+  tasksSpy.mockReset().mockResolvedValue(taskSnapshot([makeTask("t1")]));
 });
+
+function taskSnapshot(tasks: Task[]) {
+  return { docs: tasks.map((task) => ({ id: task.id, data: () => task })) };
+}
 
 describe("ensureFestivalDraw", () => {
   it("persists a draw once with deterministic id and returns the existing draw on subsequent or concurrent calls", async () => {
     const tasks = [makeTask("t1"), makeTask("t2"), makeTask("t3")];
+    tasksSpy.mockResolvedValue(taskSnapshot(tasks));
 
     // Two concurrent calls with different RNGs must converge on a single draw.
     const [drawA, drawB] = await Promise.all([
       ensureFestivalDraw({
         householdId: "h1",
         dateKey: DATE,
-        tasks,
         memberIds: ["u1"],
         settings,
         rng: () => 0.0,
@@ -105,7 +112,6 @@ describe("ensureFestivalDraw", () => {
       ensureFestivalDraw({
         householdId: "h1",
         dateKey: DATE,
-        tasks,
         memberIds: ["u1"],
         settings,
         rng: () => 0.99,
@@ -122,7 +128,6 @@ describe("ensureFestivalDraw", () => {
     const drawC: FestivalDraw | null = await ensureFestivalDraw({
       householdId: "h1",
       dateKey: DATE,
-      tasks,
       memberIds: ["u1"],
       settings: { ...settings, multiplier: 5 },
       rng: () => 0.5,
@@ -134,7 +139,7 @@ describe("ensureFestivalDraw", () => {
   });
 
   it("waits for history and propagates failure so completion can retry", async () => {
-    const input = { householdId: "h1", dateKey: DATE, tasks: [makeTask("t1")], memberIds: ["u1"], settings };
+    const input = { householdId: "h1", dateKey: DATE, memberIds: ["u1"], settings };
     let rejectHistory!: (reason: Error) => void;
     historySpy.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectHistory = reject; }));
     const pending = ensureFestivalDraw(input);
@@ -148,11 +153,45 @@ describe("ensureFestivalDraw", () => {
   });
 
   it("preserves an empty draw and reads stored draws even after settings are disabled", async () => {
-    const input = { householdId: "h1", dateKey: DATE, tasks: [], memberIds: ["u1"], settings };
+    tasksSpy.mockResolvedValue(taskSnapshot([]));
+    const input = { householdId: "h1", dateKey: DATE, memberIds: ["u1"], settings };
     const first = await ensureFestivalDraw(input);
     expect(first?.taskIds).toEqual([]);
-    const second = await ensureFestivalDraw({ ...input, tasks: [makeTask("t1")], settings: undefined });
+    tasksSpy.mockResolvedValue(taskSnapshot([makeTask("t1")]));
+    const second = await ensureFestivalDraw({ ...input, settings: undefined });
     expect(second).toMatchObject(first!);
+    expect(setSpy).toHaveBeenCalledOnce();
+    expect(tasksSpy).toHaveBeenCalledOnce();
+  });
+
+  it("uses server schedules and additions instead of stale caller candidates", async () => {
+    const input = {
+      householdId: "h1", dateKey: DATE, memberIds: ["u1"], settings,
+      // A stale caller value cannot participate in candidate selection.
+      tasks: [makeTask("t1"), makeTask("archived")],
+    };
+    tasksSpy.mockResolvedValue(taskSnapshot([
+      { ...makeTask("t1"), repeat: { type: "weekly", weekdays: [1] } },
+      { ...makeTask("archived"), archived: true },
+      makeTask("t2"),
+    ]));
+    const draw = await ensureFestivalDraw(input);
+    expect(draw?.taskIds).toEqual(["t2"]);
+    expect(tasksSpy).toHaveBeenCalledWith({ field: "householdId", operator: "==", value: "h1" });
+    expect(setSpy).toHaveBeenCalledOnce();
+  });
+
+  it("waits for server tasks and leaves no draw on read failure so retry can succeed", async () => {
+    const input = { householdId: "h1", dateKey: DATE, memberIds: ["u1"], settings };
+    let rejectTasks!: (reason: Error) => void;
+    tasksSpy.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectTasks = reject; }));
+    const pending = ensureFestivalDraw(input);
+    await vi.waitFor(() => expect(tasksSpy).toHaveBeenCalledOnce());
+    expect(setSpy).not.toHaveBeenCalled();
+    rejectTasks(new Error("offline"));
+    await expect(pending).rejects.toThrow("offline");
+    expect(setSpy).not.toHaveBeenCalled();
+    expect((await ensureFestivalDraw(input))?.taskIds).toEqual(["t1"]);
     expect(setSpy).toHaveBeenCalledOnce();
   });
 });
