@@ -33,6 +33,7 @@ import { useTasks } from "../data/tasks";
 import { useEffects } from "../effects/context";
 import { useHousehold } from "../household/context";
 import { addDaysKey, formatDateJa, nowHm, todayKey } from "../lib/date";
+import { resolveTaskReward } from "../lib/festival";
 import { activePeriodLabelJa, assigneeLabelJa, repeatLabelJa } from "../lib/taskLabels";
 import type { Entry } from "../types";
 import { UNFILED_LABEL, groupTodayRows, progressOf, todayRowsFor } from "./today";
@@ -92,6 +93,7 @@ export function TodayScreen(): JSX.Element {
   const dayEntries = useEntriesForDate(householdId, dateKey);
   const recentEntries = useRecentEntries(householdId);
   const festivalDraw = useFestivalDraw(householdId, dateKey);
+  const [drawError, setDrawError] = useState<string | null>(null);
 
   // Fix the random festival draw once per household + dateKey when the day
   // is not in the future and random festival settings are enabled.
@@ -101,6 +103,7 @@ export function TodayScreen(): JSX.Element {
       !householdId ||
       !household?.festival?.enabled ||
       tasks.loading ||
+      tasks.error !== null ||
       festivalDraw.loading ||
       festivalDraw.data !== null
     ) {
@@ -111,13 +114,16 @@ export function TodayScreen(): JSX.Element {
       dateKey,
       settings: household.festival,
       tasks: tasks.data,
-    }).catch(() => undefined);
+      memberIds: members.map((member) => member.uid),
+    }).then(() => setDrawError(null), () => setDrawError(dateKey));
   }, [
     isFuture,
     householdId,
     household?.festival,
-     dateKey,
+    dateKey,
+    members,
     tasks.loading,
+    tasks.error,
     tasks.data,
     festivalDraw.loading,
     festivalDraw.data,
@@ -155,8 +161,9 @@ export function TodayScreen(): JSX.Element {
 
   const progress = progressOf(rows);
   const coinYen = household?.coinYen ?? 0;
-  const loading = tasks.loading || dayEntries.loading;
-  const loadFailed = tasks.error !== null || dayEntries.error !== null;
+  const loading = tasks.loading || dayEntries.loading || festivalDraw.loading;
+  const loadFailed = tasks.error !== null || dayEntries.error !== null ||
+    festivalDraw.error !== null || drawError === dateKey;
 
   const commentsRow =
     rows.find((row) => row.task.id === commentsTaskId && row.entry !== null) ??
@@ -195,6 +202,17 @@ export function TodayScreen(): JSX.Element {
     file?: File,
   ): void => {
     void action.run(async () => {
+      // Never use a row's provisional reward: the persisted draw may still
+      // be loading. A failed read/create stops completion and is retryable.
+      const draw = await ensureFestivalDraw({
+        householdId: row.task.householdId,
+        dateKey,
+        settings: household?.festival,
+        tasks: tasks.data,
+        memberIds: members.map((member) => member.uid),
+      });
+      setDrawError(null);
+      const reward = resolveTaskReward(row.task, dateKey, draw);
       // Upload before the entry write. A path recorded for an object that
       // never arrived would render as a permanently broken photo. Keyed to
       // whichever slot this tap will land on, so two completions on the
@@ -216,14 +234,14 @@ export function TodayScreen(): JSX.Element {
         uid,
         row.entries,
         photoPath,
-        row.festivalMultiplier,
+        reward.multiplier,
       );
       celebrate("stack", { origin });
       // Pending coins are a promise, not earnings: only an approved landing
       // gets the coin flight and the shockwave. A pending one still gets an
       // answer back — the wish — so a tap is never met with silence.
       if (status === "approved") {
-        celebrate("coinfly", { coin: row.effectiveCoin, origin });
+        celebrate("coinfly", { coin: reward.coin, origin });
         celebrate("burst", { origin });
       } else {
         celebrate("wish", { origin });

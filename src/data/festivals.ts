@@ -7,19 +7,22 @@
 // setting, and `firestore.rules` allows `create` only (`allow update: if false`).
 
 import {
+  collection,
   doc,
+  getDocsFromServer,
+  query,
   runTransaction,
+  where,
   type DocumentData,
   type DocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import {
   drawFestivalTasks,
-  festivalCandidatesForDate,
   isFestivalDay,
 } from "../lib/festival";
 import { festivalDrawId } from "../lib/ids";
-import type { FestivalDraw, FestivalSettings, Live, Task } from "../types";
+import type { Entry, FestivalDraw, FestivalSettings, Live, Task } from "../types";
 import { useLiveDoc } from "./live";
 import { forWrite } from "./sanitise";
 
@@ -50,13 +53,11 @@ export async function ensureFestivalDraw(input: {
   householdId: string;
   dateKey: string;
   tasks: readonly Task[];
+  memberIds: readonly string[];
   settings: FestivalSettings | undefined;
   rng?: () => number;
 }): Promise<FestivalDraw | null> {
-  const { householdId, dateKey, tasks, settings, rng } = input;
-  if (!settings || !isFestivalDay(dateKey, settings)) return null;
-  const candidates = festivalCandidatesForDate(tasks, dateKey);
-  if (candidates.length === 0) return null;
+  const { householdId, dateKey, tasks, memberIds, settings, rng } = input;
 
   const id = festivalDrawId(householdId, dateKey);
   const running = inFlight.get(id);
@@ -70,10 +71,20 @@ export async function ensureFestivalDraw(input: {
       if (snap.exists()) {
         return { ...(snap.data() as Omit<FestivalDraw, "id">), id: snap.id };
       }
+      if (!settings || !isFestivalDay(dateKey, settings)) return null;
+      // The recent timeline is capped; retirement needs the full history.
+      // Read from the server so an incomplete offline cache cannot spend K.
+      const history = await getDocsFromServer(query(
+        collection(firestore, "entries"),
+        where("householdId", "==", householdId),
+      ));
+      const entries = history.docs.map((entry) => ({ ...entry.data(), id: entry.id }) as Entry);
       const drawn = drawFestivalTasks({
         householdId,
         dateKey,
         tasks,
+        entries,
+        memberIds,
         settings,
         rng,
       });

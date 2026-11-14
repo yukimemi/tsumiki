@@ -174,6 +174,11 @@ describe("buildEntry with festival multiplier", () => {
     expect(built.festivalMultiplier).toBe(3);
   });
 
+  it.each([false, true])("preserves valid zero-coin festival entries (needsApproval=%s)", (needsApproval) => {
+    const built = buildEntry({ ...baseTask, coin: 0, needsApproval }, MEMBER_ID, DATE_KEY, 1, 3);
+    expect(built).toMatchObject({ baseCoin: 0, coin: 0, festivalMultiplier: 3, status: needsApproval ? "pending" : "approved" });
+  });
+
   it("lets a manual festival on the task override a random multiplier passed in", () => {
     const manualTask: Task = {
       ...baseTask,

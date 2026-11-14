@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Entry, FestivalDraw, FestivalSettings, Task } from "../types";
 import { isTaskDueOn } from "./due";
+import { monthKeyOf, weekKeyOf } from "./date";
 import { festivalDrawId } from "./ids";
 
 export const MIN_FESTIVAL_MULTIPLIER = 2;
@@ -210,14 +211,37 @@ export function resolveTaskReward(
 export function festivalCandidatesForDate(
   tasks: readonly Task[],
   dateKey: string,
+  entries: readonly Entry[] = [],
+  memberIds: readonly string[] = [],
 ): Task[] {
   return tasks.filter(
     (task) =>
       !task.deletedAt &&
       !task.archived &&
       isTaskDueOn(task, dateKey) &&
+      hasRemainingFestivalAssignee(task, dateKey, entries, memberIds) &&
       manualMultiplierForTask(task, dateKey) === null,
   );
+}
+
+function hasRemainingFestivalAssignee(
+  task: Task,
+  dateKey: string,
+  entries: readonly Entry[],
+  memberIds: readonly string[],
+): boolean {
+  const repeat = task.repeat;
+  if (repeat.type !== "once" && repeat.type !== "weeklyCount" && repeat.type !== "monthlyCount") return true;
+  const assignees = task.assigneeIds.length ? task.assigneeIds : memberIds;
+  const periodKeyOf = repeat.type === "weeklyCount" ? weekKeyOf : monthKeyOf;
+  // Ignore this day's completions: opening order must never affect the draw.
+  const prior = entries.filter((entry) =>
+    entry.taskId === task.id && entry.dateKey < dateKey &&
+    entry.status !== "rejected" &&
+    (repeat.type === "once" || periodKeyOf(entry.dateKey) === periodKeyOf(dateKey)),
+  );
+  const quota = repeat.type === "once" ? 1 : repeat.count;
+  return assignees.some((id) => prior.filter((entry) => entry.memberId === id).length < quota);
 }
 
 /**
@@ -231,6 +255,8 @@ export function drawFestivalTasks(input: {
   householdId?: string;
   dateKey: string;
   tasks: readonly Task[];
+  entries?: readonly Entry[];
+  memberIds?: readonly string[];
   settings: FestivalSettings | null | undefined;
   existingDraw?: FestivalDraw | null;
   rng?: () => number;
@@ -240,7 +266,7 @@ export function drawFestivalTasks(input: {
   if (!isFestivalDay(dateKey, settings) || !settings) return null;
 
   const multiplier = clampFestivalMultiplier(settings.multiplier);
-  const candidates = festivalCandidatesForDate(tasks, dateKey);
+  const candidates = festivalCandidatesForDate(tasks, dateKey, input.entries, input.memberIds);
   const rawCount = Number.isFinite(settings.taskCount)
     ? Math.max(0, Math.floor(settings.taskCount))
     : 0;

@@ -196,7 +196,7 @@ service cloud.firestore {
               && !request.resource.data.keys().hasAny(['baseCoin']))
         || (isValidFestivalMultiplier(request.resource.data.festivalMultiplier)
             && request.resource.data.baseCoin is int
-            && request.resource.data.baseCoin > 0
+            && request.resource.data.baseCoin >= 0
             && request.resource.data.coin
                  == request.resource.data.baseCoin * request.resource.data.festivalMultiplier);
     }

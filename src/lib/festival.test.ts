@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FestivalDraw, FestivalSettings, RepeatRule, Task } from "../types";
+import type { Entry, FestivalDraw, FestivalSettings, RepeatRule, Task } from "../types";
 import {
   clampFestivalMultiplier,
   drawFestivalTasks,
@@ -33,6 +33,31 @@ function makeTask(overrides: Partial<Task> & { repeat?: RepeatRule } = {}): Task
 }
 
 const DATE = "2026-08-23"; // Sunday
+
+describe("festival candidates before the draw date", () => {
+  const prior = (memberId: string, dateKey = "2026-08-22", status: Entry["status"] = "approved") => ({
+    id: `${memberId}__${dateKey}`, taskId: "t1", memberId, dateKey, status,
+  }) as Entry;
+
+  it.each<RepeatRule>([{ type: "once" }, { type: "weeklyCount", count: 1 }, { type: "monthlyCount", count: 1 }])("excludes exhausted $type tasks only when every assignee has finished", (repeat) => {
+    const task = makeTask({ repeat });
+    expect(festivalCandidatesForDate([task], DATE, [prior("a"), prior("b")], ["a", "b"])).toEqual([]);
+    expect(festivalCandidatesForDate([task], DATE, [prior("a")], ["a", "b"])).toEqual([task]);
+    expect(festivalCandidatesForDate([{ ...task, assigneeIds: ["a"] }], DATE, [prior("a")], ["a", "b"])).toEqual([]);
+    expect(festivalCandidatesForDate([task], DATE, [prior("a", DATE), prior("b", DATE)], ["a", "b"])).toEqual([task]);
+    expect(festivalCandidatesForDate([task], DATE, [prior("a", "2026-08-22", "rejected")], ["a"])).toEqual([task]);
+    expect(festivalCandidatesForDate([task], DATE, [prior("a", "2026-08-22", "pending")], ["a"])).toEqual([]);
+  });
+
+  it("counts only the current period, but keeps old once completions retired", () => {
+    for (const repeat of [{ type: "weeklyCount", count: 1 }, { type: "monthlyCount", count: 1 }] as const) {
+      const task = makeTask({ repeat });
+      expect(festivalCandidatesForDate([task], DATE, [prior("a", "2026-07-01")], ["a"])).toEqual([task]);
+    }
+    const task = makeTask({ repeat: { type: "once" } });
+    expect(festivalCandidatesForDate([task], DATE, [prior("a", "2026-07-01")], ["a"])).toEqual([]);
+  });
+});
 
 describe("festival multiplier validation and range (2..5)", () => {
   it("accepts integers 2..5 and rejects out-of-range or non-integer values", () => {

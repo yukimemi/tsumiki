@@ -3,12 +3,17 @@ import type { FestivalDraw, FestivalSettings, Task } from "../types";
 
 const store = new Map<string, Record<string, unknown>>();
 const setSpy = vi.fn();
+const historySpy = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/firebase", () => ({
   db: () => ({}),
 }));
 
 vi.mock("firebase/firestore", () => ({
+  collection: vi.fn(),
+  query: vi.fn(),
+  where: vi.fn(),
+  getDocsFromServer: historySpy,
   doc: (_db: unknown, col: string, id: string) => ({
     id,
     path: `${col}/${id}`,
@@ -80,6 +85,7 @@ const settings: FestivalSettings = {
 beforeEach(() => {
   store.clear();
   setSpy.mockClear();
+  historySpy.mockReset().mockResolvedValue({ docs: [] });
 });
 
 describe("ensureFestivalDraw", () => {
@@ -92,6 +98,7 @@ describe("ensureFestivalDraw", () => {
         householdId: "h1",
         dateKey: DATE,
         tasks,
+        memberIds: ["u1"],
         settings,
         rng: () => 0.0,
       }),
@@ -99,6 +106,7 @@ describe("ensureFestivalDraw", () => {
         householdId: "h1",
         dateKey: DATE,
         tasks,
+        memberIds: ["u1"],
         settings,
         rng: () => 0.99,
       }),
@@ -115,6 +123,7 @@ describe("ensureFestivalDraw", () => {
       householdId: "h1",
       dateKey: DATE,
       tasks,
+      memberIds: ["u1"],
       settings: { ...settings, multiplier: 5 },
       rng: () => 0.5,
     });
@@ -122,5 +131,28 @@ describe("ensureFestivalDraw", () => {
     expect(setSpy).toHaveBeenCalledTimes(1);
     expect(drawC?.taskIds).toEqual(drawA!.taskIds);
     expect(drawC?.multiplier).toBe(3);
+  });
+
+  it("waits for history and propagates failure so completion can retry", async () => {
+    const input = { householdId: "h1", dateKey: DATE, tasks: [makeTask("t1")], memberIds: ["u1"], settings };
+    let rejectHistory!: (reason: Error) => void;
+    historySpy.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectHistory = reject; }));
+    const pending = ensureFestivalDraw(input);
+    await vi.waitFor(() => expect(historySpy).toHaveBeenCalledOnce());
+    expect(setSpy).not.toHaveBeenCalled();
+    rejectHistory(new Error("offline"));
+    await expect(pending).rejects.toThrow("offline");
+    expect(setSpy).not.toHaveBeenCalled();
+    const draw = await ensureFestivalDraw(input);
+    expect(draw?.taskMultipliers.t1).toBe(3);
+  });
+
+  it("preserves an empty draw and reads stored draws even after settings are disabled", async () => {
+    const input = { householdId: "h1", dateKey: DATE, tasks: [], memberIds: ["u1"], settings };
+    const first = await ensureFestivalDraw(input);
+    expect(first?.taskIds).toEqual([]);
+    const second = await ensureFestivalDraw({ ...input, tasks: [makeTask("t1")], settings: undefined });
+    expect(second).toMatchObject(first!);
+    expect(setSpy).toHaveBeenCalledOnce();
   });
 });
