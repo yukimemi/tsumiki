@@ -22,6 +22,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { useMemo } from "react";
+import { manualFestivalSchema } from "../lib/festival";
 import { db } from "../lib/firebase";
 import type { Live, Task } from "../types";
 import { useLiveDocs } from "./live";
@@ -39,6 +40,7 @@ export type TaskDraft = Omit<
   | "deletedAt"
   | "order"
   | "archived"
+  | "manualFestivals"
 > & { order?: number };
 
 function mapTask(d: QueryDocumentSnapshot<DocumentData>): Task {
@@ -207,4 +209,26 @@ export async function reorderTasks(ids: string[]): Promise<void> {
     });
   }
   await batch.commit();
+}
+
+export async function setTaskManualFestival(
+  id: string,
+  dateKey: string,
+  multiplier: number,
+): Promise<void> {
+  const parsed = manualFestivalSchema.parse({ dateKey, multiplier });
+  await updateDoc(doc(db(), COL, id), {
+    [`manualFestivals.${parsed.dateKey}`]: parsed.multiplier,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function clearTaskManualFestival(
+  id: string,
+  dateKey: string,
+): Promise<void> {
+  await updateDoc(doc(db(), COL, id), {
+    [`manualFestivals.${dateKey}`]: deleteField(),
+    updatedAt: serverTimestamp(),
+  });
 }

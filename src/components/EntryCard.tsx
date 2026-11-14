@@ -1,9 +1,10 @@
 import type { JSX } from "react";
 
+import { entryFestivalReward } from "../lib/festival";
 import { formatWhenJa } from "../lib/when";
 import { EntryPhoto } from "./EntryPhoto";
 import type { Entry, MemberInfo, Role } from "../types";
-import { Avatar, Badge, Button, Card, CoinAmount } from "./ui";
+import { Avatar, Badge, Button, Card, CoinAmount, FestivalBadge } from "./ui";
 
 /**
  * One completion on a timeline. Everything it needs arrives by prop, so the
@@ -43,9 +44,14 @@ export function EntryCard(props: {
   } = props;
   const pill = STATUS_PILL[entry.status];
   const deciding = canDecide && entry.status === "pending";
+  const reward = entryFestivalReward(entry);
+  const isFestival = reward.festivalMultiplier !== undefined;
 
   return (
-    <Card padded={false} className="overflow-hidden">
+    <Card
+      padded={false}
+      className={`overflow-hidden ${isFestival ? "border-coin/60" : ""}`}
+    >
       <button
         type="button"
         onClick={() => props.onOpenComments()}
@@ -78,10 +84,16 @@ export function EntryCard(props: {
             <span aria-hidden="true">{entry.taskEmoji} </span>
             {entry.taskTitle}
           </span>
+          {reward.festivalMultiplier ? (
+            <span className="mt-1 inline-flex">
+              <FestivalBadge multiplier={reward.festivalMultiplier} />
+            </span>
+          ) : null}
         </span>
 
         <CoinAmount
           coins={entry.coin}
+          baseCoins={isFestival ? reward.baseCoin : undefined}
           yen={compact || coinYen <= 0 ? undefined : entry.coin * coinYen}
           size="sm"
           className="flex-none"

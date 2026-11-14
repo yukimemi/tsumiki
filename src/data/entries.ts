@@ -21,6 +21,12 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { useMemo } from "react";
+import {
+  effectiveReward,
+  entryFestivalReward,
+  isValidFestivalMultiplier,
+  manualMultiplierForTask,
+} from "../lib/festival";
 import { db } from "../lib/firebase";
 import { entryId, entrySeq } from "../lib/ids";
 import type { Entry, EntryStatus, Live, Task } from "../types";
@@ -108,7 +114,13 @@ export function buildEntry(
   memberId: string,
   dateKey: string,
   seq: number,
+  festivalMultiplier?: number,
 ): Omit<Entry, "completedAt"> & { completedAt: unknown } {
+  // Manual festival on the task always overrides any caller-supplied random multiplier.
+  const manual = manualMultiplierForTask(task, dateKey);
+  const candidate = manual ?? festivalMultiplier ?? 1;
+  const activeMultiplier = isValidFestivalMultiplier(candidate) ? candidate : 1;
+  const coin = effectiveReward(task.coin, activeMultiplier);
   return {
     id: entryId(task.id, memberId, dateKey, seq),
     householdId: task.householdId,
@@ -118,7 +130,10 @@ export function buildEntry(
     memberId,
     dateKey,
     status: statusForTask(task),
-    coin: task.coin,
+    coin,
+    ...(activeMultiplier >= 2
+      ? { baseCoin: task.coin, festivalMultiplier: activeMultiplier }
+      : {}),
     completedAt: serverTimestamp(),
     commentCount: 0,
   };
@@ -233,11 +248,18 @@ export async function completeTask(
   todayEntries: Entry[],
   /** Already uploaded by the caller; only the path is recorded here. */
   photoPath?: string,
+  festivalMultiplier?: number,
 ): Promise<EntryStatus> {
   const slot = targetEntrySlot(todayEntries, task.dailyLimit ?? 1);
   if (!slot) return todayEntries.at(-1)?.status ?? "approved";
   const firestore = db();
-  const { id, ...fields } = buildEntry(task, memberId, dateKey, slot.seq);
+  const { id, ...fields } = buildEntry(
+    task,
+    memberId,
+    dateKey,
+    slot.seq,
+    festivalMultiplier,
+  );
   const batch = writeBatch(firestore);
   batch.set(
     doc(firestore, COL, id),
@@ -246,19 +268,21 @@ export async function completeTask(
       ...(photoPath ? { photoPath, photoAt: serverTimestamp() } : {}),
     }),
   );
-  if (fields.status === "approved" && task.coin !== 0) {
+  if (fields.status === "approved" && fields.coin !== 0) {
     applyCoinMovement(
       batch,
       firestore,
       {
         householdId: task.householdId,
         memberId,
-        delta: task.coin,
+        delta: fields.coin,
+        baseCoin: fields.baseCoin,
+        festivalMultiplier: fields.festivalMultiplier,
         reason: "task",
         entryId: id,
         actorId: actorUid,
       },
-      task.coin,
+      fields.coin,
     );
   }
   await batch.commit();
@@ -276,6 +300,7 @@ export async function undoEntry(entry: Entry, actorUid: string): Promise<void> {
   batch.delete(doc(firestore, COL, entry.id));
   const delta = coinDeltaForUndo(entry);
   if (delta !== 0) {
+    const reward = entryFestivalReward(entry);
     applyCoinMovement(
       batch,
       firestore,
@@ -283,6 +308,8 @@ export async function undoEntry(entry: Entry, actorUid: string): Promise<void> {
         householdId: entry.householdId,
         memberId: entry.memberId,
         delta,
+        baseCoin: reward.baseCoin,
+        festivalMultiplier: reward.festivalMultiplier,
         reason: "adjust",
         entryId: entry.id,
         note: UNDO_NOTE,
@@ -329,19 +356,22 @@ export async function approveEntry(entry: Entry, actorUid: string): Promise<void
     decidedBy: actorUid,
     decidedAt: serverTimestamp(),
   });
-  if (entry.coin !== 0) {
+  const reward = entryFestivalReward(entry);
+  if (reward.coin !== 0) {
     applyCoinMovement(
       batch,
       firestore,
       {
         householdId: entry.householdId,
         memberId: entry.memberId,
-        delta: entry.coin,
+        delta: reward.coin,
+        baseCoin: reward.baseCoin,
+        festivalMultiplier: reward.festivalMultiplier,
         reason: "task",
         entryId: entry.id,
         actorId: actorUid,
       },
-      entry.coin,
+      reward.coin,
     );
   }
   await batch.commit();

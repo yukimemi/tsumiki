@@ -57,6 +57,39 @@ export type RepeatRule =
 
 export type RepeatType = RepeatRule["type"];
 
+export type FestivalSettings = {
+  enabled: boolean;
+  /** N: run a random festival every N days (>= 1). */
+  intervalDays: number;
+  /** K: how many scheduled tasks to pick at random (>= 1). */
+  taskCount: number;
+  /** M: coin multiplier applied to picked tasks (integer 2..5). */
+  multiplier: number;
+  /** "YYYY-MM-DD" in Asia/Tokyo used as day 0 for the N-day cadence. */
+  anchorDate?: string;
+};
+
+/**
+ * One persisted random festival draw for a (household, dateKey) pair.
+ * Keyed deterministically by `${householdId}__${dateKey}` and written
+ * create-only inside a transaction so two devices opening the app at once
+ * cannot produce two different draws or re-roll an existing one.
+ */
+export type FestivalDraw = {
+  /** `${householdId}__${dateKey}` */
+  id: string;
+  householdId: string;
+  /** "YYYY-MM-DD" in Asia/Tokyo. */
+  dateKey: string;
+  /** Task IDs picked at random for this day. */
+  taskIds: string[];
+  /** Multiplier M (2..5) locked in at draw time. */
+  multiplier: number;
+  /** Per-task multiplier map (`taskId -> multiplier`) locked in at draw time. */
+  taskMultipliers: Record<string, number>;
+  createdAt?: Timestamp;
+};
+
 export type Household = {
   id: string;
   name: string;
@@ -80,6 +113,8 @@ export type Household = {
    */
   payoutMinYen?: number;
   payoutStepYen?: number;
+  /** Automatic random festival configuration. Absent means disabled. */
+  festival?: FestivalSettings;
   /**
    * `"free" | "pro"`. Absent means free. Never writable by the client —
    * only `scripts/set-plan.ts` moves this, by bypassing the rules with a
@@ -148,6 +183,12 @@ export type Task = {
   dueDate?: string;
   /** "HH:mm" in Asia/Tokyo. Past this time an undone task counts as late. */
   dueTime?: string;
+  /**
+   * Parent-specified manual festival multipliers keyed by `dateKey`
+   * ("YYYY-MM-DD" -> integer 2..5). Takes priority over the random draw for
+   * the same task and date, and does not count against the random draw's K.
+   */
+  manualFestivals?: Record<string, number>;
   order: number;
   archived: boolean;
   createdBy: string;
@@ -176,8 +217,12 @@ export type Entry = {
   /** "YYYY-MM-DD" in Asia/Tokyo. */
   dateKey: string;
   status: EntryStatus;
-  /** Snapshot of `Task.coin` at completion time. */
+  /** Snapshot of the effective reward (`baseCoin * festivalMultiplier`) at completion time. */
   coin: number;
+  /** Snapshot of the base `Task.coin` before festival multiplication, when `festivalMultiplier` is set. */
+  baseCoin?: number;
+  /** Festival multiplier (2..5) active on `dateKey` when this entry was completed. */
+  festivalMultiplier?: number;
   note?: string;
   completedAt: Timestamp;
   decidedBy?: string;
@@ -217,6 +262,10 @@ export type LedgerEntry = {
   householdId: string;
   memberId: string;
   delta: number;
+  /** Base coin reward before festival multiplication, when `festivalMultiplier` is set. */
+  baseCoin?: number;
+  /** Festival multiplier (2..5) when this row records a festival task completion or undo. */
+  festivalMultiplier?: number;
   reason: LedgerReason;
   entryId?: string;
   payoutId?: string;

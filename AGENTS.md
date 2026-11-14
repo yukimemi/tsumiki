@@ -690,7 +690,8 @@ account at 100%.
 | Invariant | Lives in |
 | --- | --- |
 | Emulator ports | `firebase.json` `emulators` + the constants in `src/lib/firebase.ts` |
-| Entry / balance document ids | `src/lib/ids.ts` + `scripts/recalc-balances.ts` + `firestore.rules` |
+| Entry / balance / festivalDraw document ids | `src/lib/ids.ts` + `scripts/recalc-balances.ts` + `firestore.rules` |
+| Festival multiplier range (`2..5`) | `src/lib/festival.ts` (`FESTIVAL_MULTIPLIER_MIN`/`MAX`, zod schemas) + `firestore.rules` (`isValidFestivalMultiplier`, `isTaskFestivalValid`, `festivalDraws` create) |
 | `encodeEmailKey` (`.` → `%2E`) | `src/lib/ids.ts` + the `pendingRoleForSelf()` helper in `firestore.rules` |
 | Emails are stored lowercased | `src/data/invites.ts`, `src/components/InviteForm.tsx`, `firestore.rules` (`userEmail()`) |
 | Composite indexes | `firestore.indexes.json` — add one whenever a query gains an `orderBy` beside a `where` |

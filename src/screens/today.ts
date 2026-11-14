@@ -6,7 +6,8 @@
 
 import { monthKeyOf, weekKeyOf } from "../lib/date";
 import { isOverdue, isTaskDueOn } from "../lib/due";
-import type { Entry, Task } from "../types";
+import { entryFestivalReward, resolveTaskReward } from "../lib/festival";
+import type { Entry, FestivalDraw, Task } from "../types";
 
 export type TodayRow = {
   task: Task;
@@ -22,6 +23,12 @@ export type TodayRow = {
    * acting on this one. */
   entry: Entry | null;
   state: "todo" | "pending" | "approved" | "rejected" | "late";
+  /** Base coin reward before any festival multiplier. */
+  baseCoin: number;
+  /** Effective coin reward for this task on `dateKey` (`baseCoin * (festivalMultiplier ?? 1)`). */
+  effectiveCoin: number;
+  /** Active festival multiplier (`2..5`) on `dateKey`, or `undefined` when normal. */
+  festivalMultiplier?: number;
   /**
    * Only set for `weeklyCount` / `monthlyCount` tasks: how many of the
    * period's quota are already claimed (approved or pending), this row's
@@ -75,8 +82,17 @@ export function todayRowsFor(input: {
   dateKey: string;
   todayKey: string;
   nowHm: string;
+  festivalDraw?: FestivalDraw | null;
 }): TodayRow[] {
-  const { tasks, entries, memberId, dateKey, todayKey: today, nowHm } = input;
+  const {
+    tasks,
+    entries,
+    memberId,
+    dateKey,
+    todayKey: today,
+    nowHm,
+    festivalDraw,
+  } = input;
   const rows: TodayRow[] = [];
 
   for (const task of tasks) {
@@ -179,7 +195,30 @@ export function todayRowsFor(input: {
           ? entry.status
           : openState;
 
-    rows.push({ task, entries: todays, entry, state, periodProgress, dailyProgress });
+    const activeReward = resolveTaskReward(task, dateKey, festivalDraw);
+    const settledReward =
+      entry && (state === "pending" || state === "approved")
+        ? entryFestivalReward(entry)
+        : null;
+    const useSettled = settledReward?.festivalMultiplier !== undefined;
+
+    rows.push({
+      task,
+      entries: todays,
+      entry,
+      state,
+      baseCoin: useSettled
+        ? (settledReward.baseCoin ?? task.coin)
+        : activeReward.baseCoin,
+      effectiveCoin: useSettled ? settledReward.coin : activeReward.coin,
+      festivalMultiplier: useSettled
+        ? settledReward.festivalMultiplier
+        : activeReward.isFestival
+          ? activeReward.multiplier
+          : undefined,
+      periodProgress,
+      dailyProgress,
+    });
   }
 
   return rows.sort(

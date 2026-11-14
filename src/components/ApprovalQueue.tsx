@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
+import { entryFestivalReward } from "../lib/festival";
 import type { Entry, MemberInfo, Role } from "../types";
-import { Badge, Button, Card, ConfirmDialog } from "./ui";
+import { Badge, Button, Card, CoinAmount, ConfirmDialog, FestivalBadge } from "./ui";
 
 /**
  * The parent's inbox: every completion that is waiting for a decision, oldest
@@ -64,58 +65,76 @@ export function ApprovalQueue(props: {
       </div>
 
       <ul className="mt-2 space-y-2">
-        {props.entries.map((entry) => (
-          <li
-            key={entry.id}
-            className="rounded-card border border-wait/30 bg-panel p-3"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-xl" aria-hidden="true">
-                {entry.taskEmoji}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-bold text-ink">
-                  {entry.taskTitle}
-                </p>
-                <p className="text-xs text-muted">
-                  {nameOf(entry.memberId)} · {entry.coin}コイン（
-                  {entry.coin * props.coinYen}円）
-                </p>
+        {props.entries.map((entry) => {
+          const reward = entryFestivalReward(entry);
+          const isFestival = reward.festivalMultiplier !== undefined;
+          return (
+            <li
+              key={entry.id}
+              className={`rounded-card border bg-panel p-3 ${
+                isFestival ? "border-coin/60" : "border-wait/30"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xl" aria-hidden="true">
+                  {entry.taskEmoji}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-bold text-ink">
+                    {entry.taskTitle}
+                  </p>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                    <span>
+                      {nameOf(entry.memberId)} · {entry.coin}コイン（
+                      {entry.coin * props.coinYen}円）
+                    </span>
+                    {reward.festivalMultiplier ? (
+                      <FestivalBadge multiplier={reward.festivalMultiplier} />
+                    ) : null}
+                  </div>
+                </div>
+                <CoinAmount
+                  coins={entry.coin}
+                  baseCoins={isFestival ? reward.baseCoin : undefined}
+                  yen={props.coinYen > 0 ? entry.coin * props.coinYen : undefined}
+                  size="sm"
+                  className="flex-none"
+                />
               </div>
-            </div>
-            <div className="mt-2 flex gap-2">
-              <Button
-                size="md"
-                className="flex-1"
-                onClick={(event) =>
-                  props.onApprove(
-                    entry,
-                    event.currentTarget.getBoundingClientRect(),
-                  )
-                }
-              >
-                よくできました
-              </Button>
-              <Button
-                variant="ghost"
-                size="md"
-                onClick={() => props.onReject(entry)}
-              >
-                みなおし
-              </Button>
-              <Button
-                variant="ghost"
-                size="md"
-                onClick={() => props.onOpenComments(entry)}
-              >
-                💬
-                {entry.commentCount > 0 ? (
-                  <span className="tabular-nums">{entry.commentCount}</span>
-                ) : null}
-              </Button>
-            </div>
-          </li>
-        ))}
+              <div className="mt-2 flex gap-2">
+                <Button
+                  size="md"
+                  className="flex-1"
+                  onClick={(event) =>
+                    props.onApprove(
+                      entry,
+                      event.currentTarget.getBoundingClientRect(),
+                    )
+                  }
+                >
+                  よくできました
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  onClick={() => props.onReject(entry)}
+                >
+                  みなおし
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  onClick={() => props.onOpenComments(entry)}
+                >
+                  💬
+                  {entry.commentCount > 0 ? (
+                    <span className="tabular-nums">{entry.commentCount}</span>
+                  ) : null}
+                </Button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       {props.entries.length > 1 ? (

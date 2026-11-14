@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import { useUid } from "../auth/context";
@@ -13,6 +13,7 @@ import {
   Card,
   CoinAmount,
   EmptyState,
+  FestivalBadge,
   IconButton,
   ProgressRing,
   Sheet,
@@ -26,6 +27,7 @@ import {
   useEntriesForDate,
   useRecentEntries,
 } from "../data/entries";
+import { ensureFestivalDraw, useFestivalDraw } from "../data/festivals";
 import { uploadEntryPhoto } from "../data/photos";
 import { useTasks } from "../data/tasks";
 import { useEffects } from "../effects/context";
@@ -89,6 +91,37 @@ export function TodayScreen(): JSX.Element {
   const tasks = useTasks(householdId);
   const dayEntries = useEntriesForDate(householdId, dateKey);
   const recentEntries = useRecentEntries(householdId);
+  const festivalDraw = useFestivalDraw(householdId, dateKey);
+
+  // Fix the random festival draw once per household + dateKey when the day
+  // is not in the future and random festival settings are enabled.
+  useEffect(() => {
+    if (
+      isFuture ||
+      !householdId ||
+      !household?.festival?.enabled ||
+      tasks.loading ||
+      festivalDraw.loading ||
+      festivalDraw.data !== null
+    ) {
+      return;
+    }
+    void ensureFestivalDraw({
+      householdId,
+      dateKey,
+      settings: household.festival,
+      tasks: tasks.data,
+    }).catch(() => undefined);
+  }, [
+    isFuture,
+    householdId,
+    household?.festival,
+     dateKey,
+    tasks.loading,
+    tasks.data,
+    festivalDraw.loading,
+    festivalDraw.data,
+  ]);
 
   // A `once` task retires as soon as it has an entry on ANY day, so the row
   // builder is fed more than the shown day. The recent window is the
@@ -105,6 +138,7 @@ export function TodayScreen(): JSX.Element {
     dateKey,
     todayKey: today,
     nowHm: nowHm(),
+    festivalDraw: festivalDraw.data,
   });
 
   const groups = groupTodayRows(rows);
@@ -182,13 +216,14 @@ export function TodayScreen(): JSX.Element {
         uid,
         row.entries,
         photoPath,
+        row.festivalMultiplier,
       );
       celebrate("stack", { origin });
       // Pending coins are a promise, not earnings: only an approved landing
       // gets the coin flight and the shockwave. A pending one still gets an
       // answer back — the wish — so a tap is never met with silence.
       if (status === "approved") {
-        celebrate("coinfly", { coin: row.task.coin, origin });
+        celebrate("coinfly", { coin: row.effectiveCoin, origin });
         celebrate("burst", { origin });
       } else {
         celebrate("wish", { origin });
@@ -412,9 +447,14 @@ export function TodayScreen(): JSX.Element {
                 {detailRow.task.emoji}
               </span>
               {/* No clamp here — reading the whole name is the point. */}
-              <h3 className="min-w-0 flex-1 text-lg font-bold leading-snug text-ink">
-                {detailRow.task.title}
-              </h3>
+              <div className="min-w-0 flex-1 space-y-1">
+                <h3 className="text-lg font-bold leading-snug text-ink">
+                  {detailRow.task.title}
+                </h3>
+                {detailRow.festivalMultiplier ? (
+                  <FestivalBadge multiplier={detailRow.festivalMultiplier} />
+                ) : null}
+              </div>
             </div>
 
             {detailRow.task.note ? (
@@ -428,9 +468,16 @@ export function TodayScreen(): JSX.Element {
                 <dt className="text-muted">もらえる コイン</dt>
                 <dd>
                   <CoinAmount
-                    coins={detailRow.task.coin}
+                    coins={detailRow.effectiveCoin}
+                    baseCoins={
+                      detailRow.festivalMultiplier
+                        ? detailRow.baseCoin
+                        : undefined
+                    }
                     yen={
-                      coinYen > 0 ? detailRow.task.coin * coinYen : undefined
+                      coinYen > 0
+                        ? detailRow.effectiveCoin * coinYen
+                        : undefined
                     }
                     size="sm"
                   />

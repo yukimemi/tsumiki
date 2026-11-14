@@ -20,8 +20,9 @@ import {
 } from "firebase/firestore";
 import type { User } from "firebase/auth";
 import { db } from "../lib/firebase";
+import { festivalSettingsSchema } from "../lib/festival";
 import { virtualMemberId } from "../lib/ids";
-import type { Household, Live, MemberInfo, Role } from "../types";
+import type { FestivalSettings, Household, Live, MemberInfo, Role } from "../types";
 import { useLiveDocs } from "./live";
 import { clean, forMerge, forWrite } from "./sanitise";
 
@@ -38,6 +39,7 @@ const CHILD_COLLECTIONS = [
   "ledger",
   "balances",
   "payouts",
+  "festivalDraws",
 ] as const;
 
 /** A batch holds 500 writes; leave headroom rather than count exactly. */
@@ -85,6 +87,17 @@ export async function updateHousehold(
   >,
 ): Promise<void> {
   await updateDoc(doc(db(), COL, id), forMerge(patch));
+}
+
+export async function updateHouseholdFestival(
+  id: string,
+  festival: FestivalSettings,
+): Promise<void> {
+  const validated = festivalSettingsSchema.parse(festival);
+  await updateDoc(doc(db(), COL, id), {
+    festival: clean(validated),
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function setMemberRole(

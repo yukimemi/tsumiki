@@ -155,6 +155,52 @@ service cloud.firestore {
             .affectedKeys().hasOnly([request.auth.uid]);
     }
 
+    // Festival time multipliers are strictly integers in 2..5.
+    function isValidFestivalMultiplier(m) {
+      return m is int && m >= 2 && m <= 5;
+    }
+
+    function isValidFestivalSettings(f) {
+      return f is map
+        && f.keys().hasOnly(['enabled', 'intervalDays', 'taskCount', 'multiplier', 'anchorDate'])
+        && f.enabled is bool
+        && f.intervalDays is int && f.intervalDays >= 1
+        && f.taskCount is int && f.taskCount >= 1
+        && isValidFestivalMultiplier(f.multiplier)
+        && (!f.keys().hasAny(['anchorDate']) || f.anchorDate is string);
+    }
+
+    function isFestivalFieldValid() {
+      return !request.resource.data.keys().hasAny(['festival'])
+        || isValidFestivalSettings(request.resource.data.festival);
+    }
+
+    // Any parent (owner or parent) may configure the household's random festival settings.
+    function isFestivalSettingsUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['festival', 'updatedAt'])
+        && isFestivalFieldValid();
+    }
+
+    // Parent-specified manual festivals on a task map dateKey -> 2..5.
+    function isTaskFestivalValid() {
+      return !request.resource.data.keys().hasAny(['manualFestivals'])
+        || (request.resource.data.manualFestivals is map
+            && request.resource.data.manualFestivals.values().hasOnly([2, 3, 4, 5]));
+    }
+
+    // When an entry records a festival multiplier, it must be 2..5 and
+    // coin must equal baseCoin * festivalMultiplier.
+    function isEntryFestivalValid() {
+      return (!request.resource.data.keys().hasAny(['festivalMultiplier'])
+              && !request.resource.data.keys().hasAny(['baseCoin']))
+        || (isValidFestivalMultiplier(request.resource.data.festivalMultiplier)
+            && request.resource.data.baseCoin is int
+            && request.resource.data.baseCoin > 0
+            && request.resource.data.coin
+                 == request.resource.data.baseCoin * request.resource.data.festivalMultiplier);
+    }
+
     match /households/{householdId} {
       allow read: if isAdmin()
         || (isSignedIn()
@@ -175,13 +221,16 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 30
-        && request.resource.data.get('plan', 'free') == 'free';
+        && request.resource.data.get('plan', 'free') == 'free'
+        && isFestivalFieldValid();
       allow update: if (isParent(householdId) && isTaskCountUpdate())
         || ((isOwner(householdId)
               || isClaiming()
               || (isParent(householdId) && membershipKeysOnly())
+              || (isParent(householdId) && isFestivalSettingsUpdate())
               || isSelfInfoUpdate(householdId))
-            && isPlanImmutable());
+            && isPlanImmutable()
+            && isFestivalFieldValid());
       allow delete: if isOwner(householdId);
     }
 
@@ -189,10 +238,29 @@ service cloud.firestore {
       allow read: if isMember(resource.data.householdId);
       allow create: if isParent(request.resource.data.householdId)
         && (isPro(request.resource.data.householdId)
-            || hh(request.resource.data.householdId).get('taskCount', 0) < 30);
+            || hh(request.resource.data.householdId).get('taskCount', 0) < 30)
+        && isTaskFestivalValid();
       allow update: if isParent(resource.data.householdId)
-        && request.resource.data.householdId == resource.data.householdId;
+        && request.resource.data.householdId == resource.data.householdId
+        && isTaskFestivalValid();
       allow delete: if isParent(resource.data.householdId);
+    }
+
+    // Per-family per-date random festival draw (`${householdId}__${dateKey}`).
+    // Created once via transaction and never updated so the day's draw stays fixed.
+    match /festivalDraws/{drawId} {
+      allow read: if (resource == null && isSignedIn())
+        || isMember(resource.data.householdId);
+      allow create: if isMember(request.resource.data.householdId)
+        && drawId == request.resource.data.householdId + '__' + request.resource.data.dateKey
+        && request.resource.data.dateKey is string
+        && request.resource.data.taskIds is list
+        && isValidFestivalMultiplier(request.resource.data.multiplier)
+        && (!request.resource.data.keys().hasAny(['taskMultipliers'])
+            || (request.resource.data.taskMultipliers is map
+                && request.resource.data.taskMultipliers.values().hasOnly([2, 3, 4, 5])));
+      allow update: if false;
+      allow delete: if isOwner(resource.data.householdId);
     }
 
     // A parent decides a completion that is still waiting: pending ->
@@ -210,6 +278,10 @@ service cloud.firestore {
         && request.resource.data.taskId == resource.data.taskId
         && request.resource.data.dateKey == resource.data.dateKey
         && request.resource.data.coin == resource.data.coin
+        && request.resource.data.get('festivalMultiplier', 1)
+             == resource.data.get('festivalMultiplier', 1)
+        && request.resource.data.get('baseCoin', resource.data.coin)
+             == resource.data.get('baseCoin', resource.data.coin)
         && request.resource.data.status in ['approved', 'rejected'];
     }
 
@@ -241,6 +313,7 @@ service cloud.firestore {
         && request.resource.data.taskId == resource.data.taskId
         && request.resource.data.dateKey == resource.data.dateKey
         && request.resource.data.status in ['pending', 'approved']
+        && isEntryFestivalValid()
         && (!request.resource.data.keys().hasAny(['decidedBy', 'decidedAt'])
             || isParent(resource.data.householdId));
     }
@@ -267,6 +340,7 @@ service cloud.firestore {
         && (request.resource.data.memberId == request.auth.uid
             || isParent(request.resource.data.householdId))
         && request.resource.data.status in ['pending', 'approved']
+        && isEntryFestivalValid()
         && (!request.resource.data.keys().hasAny(['decidedBy', 'decidedAt'])
             || isParent(request.resource.data.householdId));
       allow update: if isDecision()
@@ -307,6 +381,8 @@ service cloud.firestore {
     function isLedgerAppend() {
       return isMember(request.resource.data.householdId)
         && request.resource.data.actorId == request.auth.uid
+        && (!request.resource.data.keys().hasAny(['festivalMultiplier'])
+            || isValidFestivalMultiplier(request.resource.data.festivalMultiplier))
         && (isParent(request.resource.data.householdId)
             || (request.resource.data.memberId == request.auth.uid
                 && ((request.resource.data.reason == 'task'

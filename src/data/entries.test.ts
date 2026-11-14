@@ -3,9 +3,9 @@
 // these two decisions plus one deterministic id.
 
 import { describe, expect, it } from "vitest";
-import { targetEntrySlot } from "./entries";
+import { buildEntry, targetEntrySlot } from "./entries";
 import { entryId } from "../lib/ids";
-import type { Entry } from "../types";
+import type { Entry, Task } from "../types";
 import { coinDeltaForUndo, statusForTask } from "./entryRules";
 
 describe("statusForTask", () => {
@@ -148,5 +148,47 @@ describe("targetEntrySlot", () => {
         5,
       ),
     ).toEqual({ seq: 4, redo: false });
+  });
+});
+
+describe("buildEntry with festival multiplier", () => {
+  const baseTask: Task = {
+    id: TASK_ID,
+    householdId: "h1",
+    title: "おふろそうじ",
+    emoji: "🛁",
+    coin: 10,
+    needsApproval: false,
+    assigneeIds: [],
+    repeat: { type: "daily" },
+    order: 0,
+    archived: false,
+    createdBy: "u1",
+  };
+
+  it("records baseCoin, festivalMultiplier, and multiplied coin while preserving deterministic entry id", () => {
+    const built = buildEntry(baseTask, MEMBER_ID, DATE_KEY, 1, 3);
+    expect(built.id).toBe(`${TASK_ID}__${MEMBER_ID}__${DATE_KEY}`);
+    expect(built.coin).toBe(30);
+    expect(built.baseCoin).toBe(10);
+    expect(built.festivalMultiplier).toBe(3);
+  });
+
+  it("lets a manual festival on the task override a random multiplier passed in", () => {
+    const manualTask: Task = {
+      ...baseTask,
+      manualFestivals: { [DATE_KEY]: 5 },
+    };
+    const built = buildEntry(manualTask, MEMBER_ID, DATE_KEY, 1, 2);
+    expect(built.coin).toBe(50);
+    expect(built.baseCoin).toBe(10);
+    expect(built.festivalMultiplier).toBe(5);
+  });
+
+  it("omits baseCoin and festivalMultiplier when no festival is active", () => {
+    const built = buildEntry(baseTask, MEMBER_ID, DATE_KEY, 1);
+    expect(built.coin).toBe(10);
+    expect(built.baseCoin).toBeUndefined();
+    expect(built.festivalMultiplier).toBeUndefined();
   });
 });

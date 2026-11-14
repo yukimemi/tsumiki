@@ -639,10 +639,62 @@ export function EmptyState({
   );
 }
 
-/* ---- CoinAmount ---------------------------------------------------- */
+/* ---- FestivalBadge / CoinAmount ------------------------------------ */
+
+export type FestivalBadgeProps = {
+  multiplier: number;
+  /** Optional original coin amount; when provided alongside `coins`, renders `10 → 30 コイン` inline too. */
+  baseCoins?: number;
+  coins?: number;
+  size?: "sm" | "md";
+  className?: string;
+};
+
+/**
+ * Eye-catching pill marking a task in "お祭りタイム" (festival time).
+ *
+ * Uses `--coin` and `--on-coin` via `.tsu-festival-badge` (defined in
+ * `src/index.css`) so the badge adapts across all themes (`hiru`, `yoru`,
+ * `matsuri`), respects `data-motion="calm"` and `prefers-reduced-motion`,
+ * and explicitly states `🎉 お祭り ×M` rather than relying on colour alone.
+ */
+export function FestivalBadge({
+  multiplier,
+  baseCoins,
+  coins,
+  size = "sm",
+  className,
+}: FestivalBadgeProps) {
+  if (multiplier < 2) return null;
+  const showAmounts =
+    baseCoins !== undefined && coins !== undefined && baseCoins !== coins;
+
+  return (
+    <span
+      data-testid="festival-badge"
+      className={classes(
+        "tsu-festival-badge inline-flex items-center gap-1 rounded-pill font-extrabold tabular-nums whitespace-nowrap",
+        size === "sm" ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-xs",
+        className,
+      )}
+    >
+      <span aria-hidden="true">🎉</span>
+      <span>お祭り ×{multiplier}</span>
+      {showAmounts ? (
+        <span className="ml-0.5 inline-flex items-baseline gap-1">
+          <s className="opacity-75">{baseCoins}</s>
+          <span aria-hidden="true">→</span>
+          <span>{coins} コイン</span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 export type CoinAmountProps = {
   coins: number;
+  /** When a festival multiplier applies, show the original amount struck through (`10 → 30 コイン`). */
+  baseCoins?: number;
   /** Shown underneath when the household's rate is known. */
   yen?: number;
   size?: "sm" | "md" | "lg";
@@ -666,25 +718,48 @@ const COIN_SIZE: Record<"sm" | "md" | "lg", string> = {
  */
 export function CoinAmount({
   coins,
+  baseCoins,
   yen,
   size = "md",
   signed = false,
   className,
 }: CoinAmountProps) {
   const sign = signed && coins > 0 ? "+" : "";
+  const isFestival = baseCoins !== undefined && baseCoins !== coins;
+
   return (
     <span className={classes("inline-flex flex-col items-end", className)}>
       <span
         className={classes(
-          "inline-flex items-center gap-1 rounded-pill border border-coin/40 bg-coin/15 px-2 py-0.5 font-bold text-ink",
+          "inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 font-bold text-ink",
+          isFestival
+            ? "border-coin bg-coin/25 shadow-glow-coin"
+            : "border-coin/40 bg-coin/15",
           COIN_SIZE[size],
         )}
       >
         <span aria-hidden="true">🪙</span>
-        <span className="tabular-nums">
-          {sign}
-          {coins}
-        </span>
+        {isFestival ? (
+          <span className="inline-flex items-baseline gap-1 tabular-nums">
+            <s className="text-xs font-normal text-muted">
+              {sign}
+              {baseCoins}
+            </s>
+            <span aria-hidden="true" className="text-xs text-muted">
+              →
+            </span>
+            <span className="font-extrabold text-ink">
+              {sign}
+              {coins}
+            </span>
+            <span className="text-xs font-bold">コイン</span>
+          </span>
+        ) : (
+          <span className="tabular-nums">
+            {sign}
+            {coins}
+          </span>
+        )}
       </span>
       {yen === undefined ? null : (
         <span className="mt-0.5 text-xs tabular-nums text-muted">
