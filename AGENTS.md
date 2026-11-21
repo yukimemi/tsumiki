@@ -2,10 +2,10 @@
 ## Shared conventions
 
 This file is the agent-agnostic source of truth (per the
-[agents.md](https://agents.md) convention). The matching
-`CLAUDE.md` and `GEMINI.md` files are thin shims that point back
-here so each tool's auto-load behaviour still finds something.
-**Edit AGENTS.md, not the shims.**
+[agents.md](https://agents.md) convention). Codex and Claude Code
+(>=2.1.277) read it directly; the `GEMINI.md` file is a thin shim
+for tools that don't yet auto-load `AGENTS.md`.
+**Edit AGENTS.md, not the shim.**
 
 ### Git workflow
 
@@ -13,6 +13,9 @@ here so each tool's auto-load behaviour still finds something.
   - Exception: trivial typo / whitespace / docs wording fixes.
 - Branch names: `feat/...`, `fix/...`, `chore/...`.
 - **PR titles + bodies in English. Commit messages in English.**
+  Issues (titles, bodies, comments) and PR review comments too: GitHub
+  is a worldwide surface, so everything written there is English in every
+  repo, whatever language the task or the conversation was in.
 - **Releases are PR-driven and tagging is automatic** — in repos that
   ship a release pipeline. Bump the version in the project's own
   manifest in a `chore/release-vX.Y.Z` PR; on merge to `main` the
@@ -54,11 +57,19 @@ then they still fire on every human-authored PR. Check
 if either file is still there, its comments are a real review, not
 noise to ignore.
 
-- **`magi review <branch>`** runs only the review + verification +
-  gate half of magi's graph: nothing competes, no implementation, no
-  judging, no vote. That is the mode for hand-written work.
-  `magi run "<task>"` is the full competition, for work handed over
-  whole. Both end at the same gate.
+- **`magi review <branch> --merge none`** runs only the review +
+  verification + gate half of magi's graph: nothing competes, no
+  implementation, no judging, no vote. That is the mode for
+  hand-written work. `magi run "<task>"` is the full competition, for
+  work handed over whole. Both end at the same gate.
+- **Always pass `--merge none` on a `magi review` you invoke by
+  hand.** `[merge] mode` in config defaults to `"pr"` for the queue
+  loop (`magi serve` / `magi web`) that drains `magi task add` —
+  there, ending in an actual PR is the point. `magi review` run
+  directly inherits that same config default when no `--merge` flag
+  is given, which would open a PR nobody asked for. `--merge none`
+  overrides it for that one invocation and leaves the branch for the
+  operator to turn into a PR themselves.
 - What the loop actually does: each reviewer gets its **own detached
   worktree pinned at the commit under review** (no reviewer can
   perturb the tree, and the fixer never races one); `verify.e2e` runs
