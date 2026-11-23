@@ -64,8 +64,8 @@ importers:
         specifier: ^0.5.8
         version: 0.5.8(eslint@10.15.0(jiti@1.21.7)(supports-color@7.2.0))
       firebase-tools:
-        specifier: ^15.34.2
-        version: 15.34.2(@types/node@26.6.5)(supports-color@7.2.0)
+        specifier: ^15.37.0
+        version: 15.37.0(@types/node@26.6.5)(supports-color@7.2.0)
       globals:
         specifier: ^17.13.0
         version: 17.13.0
@@ -1671,8 +1671,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@modelcontextprotocol/sdk@1.30.0':
-    resolution: {integrity: sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA==}
+  '@modelcontextprotocol/sdk@1.32.2':
+    resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -3998,8 +3998,8 @@ packages:
     resolution: {integrity: sha512-78/PXT1wlLLDgTzDs7sjq9hzz0vXD+zn+7wypEe4fXQxCmdmqfGsEPQxmiCSQI3ajFV91bVSsvNtrJRiW6nGng==}
     engines: {node: '>=10'}
 
-  firebase-tools@15.34.2:
-    resolution: {integrity: sha512-Xo010+PZAj5sL6hn33p19egXDmVlowPZknbs2Rf4nxd6Ulx6gLCd76qHd9XT2lV3B0u7yi0iO0BU5qrLeY8Y+g==}
+  firebase-tools@15.37.0:
+    resolution: {integrity: sha512-px7Du9nXLHxANs0RzqB5EPnVGNChJju9bTAEJewWniGKtJoFTMYgRIEH30FfA1llYK5LwgYCko3bcl0bIq4BvQ==}
     engines: {node: '>=20.0.0 || >=22.0.0 || >=24.0.0'}
     hasBin: true
 
@@ -4981,11 +4981,6 @@ packages:
   mime@1.6.0:
     resolution: {integrity: sha512-x0Vn8spI+wuJ1O6S7gnbaQg8Pxh4NNHb7KSINmEWKiPE4RKOplvijn+NkmYmmRgP68mc70j2EbeTFRsrswaQeg==}
     engines: {node: '>=4'}
-    hasBin: true
-
-  mime@2.6.0:
-    resolution: {integrity: sha512-USPkMeET31rOMiarsBNIHZKLGgvKc/LrjofAnBlOttf5ajRvqiRA8QsenbcooctK6d6Ts6aqZXBA+XbkKthiQg==}
-    engines: {node: '>=4.0.0'}
     hasBin: true
 
   mimic-fn@2.1.0:
@@ -6308,6 +6303,10 @@ packages:
 
   undici@6.28.0:
     resolution: {integrity: sha512-LIY910g9TI13YS95lrMFrs8Rm/u/irgHeTWoKCoteeJ04CUJ92eEfj0rVn+7VKMPBpUPiUoBKfhNyLI23EE/KA==}
+    engines: {node: '>=18.17'}
+
+  undici@6.29.1:
+    resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
     engines: {node: '>=18.17'}
 
   undici@7.29.0:
@@ -8381,7 +8380,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@modelcontextprotocol/sdk@1.30.0(supports-color@7.2.0)(zod@4.6.7)':
+  '@modelcontextprotocol/sdk@1.32.2(supports-color@7.2.0)(zod@4.6.7)':
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.5)
       ajv: 8.20.0
@@ -10857,14 +10856,14 @@ snapshots:
       locate-path: 6.0.0
       path-exists: 4.0.0
 
-  firebase-tools@15.34.2(@types/node@26.6.5)(supports-color@7.2.0):
+  firebase-tools@15.37.0(@types/node@26.6.5)(supports-color@7.2.0):
     dependencies:
       '@electric-sql/pglite': 0.3.16
       '@electric-sql/pglite-tools': 0.2.21(@electric-sql/pglite@0.3.16)
       '@google-cloud/cloud-sql-connector': 1.11.3(supports-color@7.2.0)
       '@google-cloud/pubsub': 5.3.1(supports-color@7.2.0)
       '@inquirer/prompts': 7.10.1(@types/node@26.6.5)
-      '@modelcontextprotocol/sdk': 1.30.0(supports-color@7.2.0)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(supports-color@7.2.0)(zod@4.6.7)
       abort-controller: 3.0.0
       ajv: 8.20.0
       ajv-formats: 3.0.1
@@ -10898,7 +10897,6 @@ snapshots:
       lsofi: 2.0.0
       marked: 13.0.3
       marked-terminal: 7.3.0(marked@13.0.3)
-      mime: 2.6.0
       minimatch: 3.1.5
       morgan: 1.12.0(supports-color@7.2.0)
       node-fetch: 2.7.0
@@ -10919,7 +10917,7 @@ snapshots:
       tcp-port-used: 1.0.3(supports-color@7.2.0)
       tmp: 0.2.7
       triple-beam: 1.4.1
-      undici: 6.28.0
+      undici: 6.29.1
       update-notifier-cjs: 5.1.7
       winston: 3.19.0
       winston-transport: 4.9.0
@@ -11950,8 +11948,6 @@ snapshots:
       mime-db: 1.54.0
 
   mime@1.6.0: {}
-
-  mime@2.6.0: {}
 
   mimic-fn@2.1.0: {}
 
@@ -13492,6 +13488,8 @@ snapshots:
       '@fastify/busboy': 2.1.1
 
   undici@6.28.0: {}
+
+  undici@6.29.1: {}
 
   undici@7.29.0: {}
 
